@@ -17,6 +17,7 @@ BOOST_AUTO_TEST_CASE(TEST_main)
 #include <boost/filesystem.hpp>
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/algorithm/copy.hpp>
+#include "architecture.h"
 
 namespace fs = boost::filesystem;
 
@@ -54,28 +55,98 @@ namespace
         return {ifss};
     }
 
-    constexpr int BATCH_SIZE = 32;
+    constexpr int BATCH_SIZE = 24;
+    constexpr int EPOCHS = 1;
+
+    template<typename DataLoader>
+    void train(
+        size_t                      epoch,
+        Architecture&               model,
+        torch::Device               device,
+        DataLoader&                 data_loader,
+        torch::optim::Optimizer&    optimizer,
+        size_t                      dataset_size)
+    {
+        model.train();
+        size_t batch_idx {0};
+        for (auto& batch : data_loader)
+        {
+            auto data = batch.data.to(device);
+            auto targets = batch.target.to(device);
+            optimizer.zero_grad();
+            auto output = model.forward(data);
+
+            auto batch_size = output.size(0);
+            targets = targets.reshape({batch_size});
+            auto loss = torch::nll_loss(output, targets);
+            // ここはクラスエントロピーを使えるはず。-> c++にはcross_entropy_lossが実装されていない。
+            AT_ASSERT(!std::isnan(loss.template item<float>()));
+            loss.backward();
+            optimizer.step();
+        }
+    }
 }
 
 
-int main()
+auto main() -> int
 {
-    //_/_/_/ Loading the Data
+    //_/_/_/ Select device
+
+    torch::manual_seed(1);
+    torch::DeviceType device_type{};
+    if (torch::cuda::is_available())
+    {
+        std::cout << "CUDA available! Training on GPU." << std::endl;
+        device_type = torch::kCUDA;
+    }
+    else
+    {
+        std::cout << "Training on CPU." << std::endl;
+        device_type = torch::kCPU;
+    }
+    torch::Device device{device_type};
+
+    //_/_/_/ Define a model
+    
+    Architecture model{32 * 32 * 3, 10};
+    model.to(device);
+
+    //_/_/_/ Load the Data
 
     auto train_dataset = load_dataset(TRAIN_PATHS).
             map(torch::data::transforms::Normalize<>(0, 255.0)).
             map(torch::data::transforms::Stack<>());
+    const size_t train_dataset_size = train_dataset.size().value();
 
     auto test_dataset = load_dataset(TEST_PATHS).
             map(torch::data::transforms::Normalize<>(0, 255.0)).
             map(torch::data::transforms::Stack<>());
-
-    auto train_data_loader = torch::data::make_data_loader(
+    const size_t test_dataset_size = test_dataset.size().value();
+    
+    auto train_loader = torch::data::make_data_loader(
             std::move(train_dataset),
             torch::data::DataLoaderOptions().batch_size(BATCH_SIZE).workers(2));
 
-    auto test_data_loader = torch::data::make_data_loader(
+    auto test_loader = torch::data::make_data_loader(
             std::move(test_dataset),
             torch::data::DataLoaderOptions().batch_size(BATCH_SIZE).workers(2));
+
+    //std::cout <<  train_dataset_size << " " << test_dataset_size << std::endl;
+    
+    //_/_/_/ Configure a optimizer
+    
+    torch::optim::Adam optimizer {
+        model.parameters(),
+        torch::optim::AdamOptions(0.0005)
+    };
+
+    //_/_/_/ Train the model
+
+    for (auto epoch = 1; epoch <= EPOCHS; ++epoch)
+    {
+        std::cout << "> epoch: " <<  epoch << std::endl;
+        train(epoch, model, device, *train_loader, optimizer, train_dataset_size);
+        //test(model, device, *test_loader, test_dataset_size);
+    }
 }
 #endif // UNIT_TEST

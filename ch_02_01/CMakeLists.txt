@@ -3,7 +3,8 @@ set(PROJ_NAME ch_02_01)
 add_executable(${PROJ_NAME} 
     ./main.cpp 
     ./custom_dataset.cpp
-    ./dataset_reader.cpp)
+    ./dataset_reader.cpp
+    ./architecture.cpp)
 
 find_package(OpenCV REQUIRED)
 find_package(Torch REQUIRED)
@@ -14,6 +15,7 @@ target_compile_definitions(
     UNIT_TEST=1
     UNIT_TEST_DatasetReader=1
     UNIT_TEST_CustomDataset=1
+    UNIT_TEST_Architecture=1
 )
 
 set(INCLUDE_DIRS

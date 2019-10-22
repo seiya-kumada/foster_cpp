@@ -2,6 +2,7 @@
 #include <string>
 #include <map>
 #include <iostream>
+#include <opencv2/highgui.hpp>
 
 namespace
 {
@@ -93,11 +94,11 @@ namespace
         int label;
         std::tie(image, label) = reader.load_one_image(0);
         BOOST_REQUIRE_EQUAL(6, label);
-        //cv::imwrite(std::string("image_0.jpg"), image);
+        cv::imwrite(std::string("image_0.jpg"), image);
 
         std::tie(image, label) = reader.load_one_image(1);
         BOOST_REQUIRE_EQUAL(9, label);
-        //cv::imwrite(std::string("image_1.jpg"), image);
+        cv::imwrite(std::string("image_1.jpg"), image);
     }
 }
 

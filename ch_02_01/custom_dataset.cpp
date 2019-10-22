@@ -16,8 +16,9 @@ namespace
 
     torch::Tensor convert_to_tensor(int label)
     {   
-        // これもcloneいるのか？
-        return torch::full({1}, label);
+        auto tensor = torch::empty(1, torch::kInt64);
+        *reinterpret_cast<int64_t*>(tensor.data_ptr()) = label;
+        return tensor;
     }
 }
 
@@ -94,17 +95,18 @@ namespace
         BOOST_REQUIRE_EQUAL(data.sizes(), (std::vector<std::int64_t>{3, 32, 32}));
         BOOST_REQUIRE_EQUAL(label.sizes(), (std::vector<std::int64_t>{1}));
                
-        const std::vector<float> answers = {6, 9, 9, 4, 1};
+        const std::vector<int> answers = {6, 9, 9, 4, 1};
         for (auto i = 0; i < 5; ++i)
         {
             const auto& e = ds.get(i);
             const auto& l = e.target;
-            BOOST_REQUIRE_EQUAL(l.item<float>(), answers[i]); 
+            BOOST_REQUIRE_EQUAL(l.item<int64_t>(), answers[i]); 
         }
     }
 
     void test_1()
     {
+        torch::manual_seed(1);
         std::vector<std::ifstream> ifss{};
         boost::copy(
             PATHS | boost::adaptors::transformed(
@@ -126,7 +128,9 @@ namespace
         auto data_loader = torch::data::make_data_loader(
                 std::move(ds),
                 torch::data::DataLoaderOptions().batch_size(BATCH_SIZE).workers(2).drop_last(true));
-        
+       
+        const std::vector<int> answers = {4, 5, 3, 4, 6};
+        int c = 0;
         for (auto& batch : *data_loader)
         {
             auto batch_size = batch.data.size(0);
@@ -140,6 +144,17 @@ namespace
                 BOOST_REQUIRE_EQUAL(32, batch.data[i].size(2));
                 auto v =  data[0][0][0].item<float>();
                 BOOST_CHECK(0.0 <= v && v <= 1.0);
+                //std::cout << target.sizes() << std::endl;
+                BOOST_CHECK(answers[c] == target.item<int64_t>());
+                c += 1;
+                if (c == 5)
+                {
+                    break;
+                }
+            }
+            if (c == 5)
+            {
+                break;
             }
         }
     }
@@ -150,7 +165,6 @@ BOOST_AUTO_TEST_CASE(TEST_CustomDataset)
     std::cout << "CustomDataset\n";
     test_0();
     test_1();
-
 }
 
 #endif // UNIT_TEST_CustomDataset
