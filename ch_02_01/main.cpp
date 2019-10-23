@@ -18,6 +18,11 @@ BOOST_AUTO_TEST_CASE(TEST_main)
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/algorithm/copy.hpp>
 #include "architecture.h"
+#include <torch/torch.h>
+//#include <ATen/ATen.h>
+//#include <ATen/NativeFunctions.h>
+//#include <ATen/Dispatch.h>
+//#include <ATen/CPUApplyUtils.h>
 
 namespace fs = boost::filesystem;
 
@@ -56,7 +61,8 @@ namespace
     }
 
     constexpr int BATCH_SIZE = 24;
-    constexpr int EPOCHS = 1;
+    constexpr int EPOCHS = 20;
+    constexpr int LOG_INTERVAL = 10;
 
     template<typename DataLoader>
     void train(
@@ -83,7 +89,51 @@ namespace
             AT_ASSERT(!std::isnan(loss.template item<float>()));
             loss.backward();
             optimizer.step();
+
+            if (batch_idx % LOG_INTERVAL == 0)
+            {
+                std::printf("\rTrain Epoch: %ld [%5ld/%5ld] Loss: %.4f",
+                    epoch,
+                    batch_idx * batch.data.size(0),
+                    dataset_size,
+                    loss.template item<float>());
+            }
+            ++batch_idx;
         }
+    }
+
+    template<typename DataLoader>
+    void test(
+        Architecture&   model,
+        torch::Device   device,
+        DataLoader&     data_loader,
+        size_t          dataset_size)
+    {
+        torch::NoGradGuard no_grad{};
+        model.eval();
+        double test_loss {0};
+        int32_t correct {0};
+        for (const auto& batch : data_loader)
+        {
+            auto data = batch.data.to(device);
+            auto targets = batch.target.to(device);
+            auto output = model.forward(data);
+            auto batch_size = output.size(0);
+            targets = targets.reshape({batch_size});
+            test_loss += torch::nll_loss(
+                output,
+                targets,
+                {},
+                Reduction::Reduction::Sum).template item<float>();
+            auto pred = output.argmax(1);
+            correct += pred.eq(targets).sum().template item<int64_t>();
+        }
+
+        test_loss /= dataset_size;
+        std::printf(
+            "\nTest set: Average loss: %.4f | Accuracy: %.3f\n",
+            test_loss,
+            static_cast<double>(correct) / dataset_size);
     }
 }
 
@@ -146,7 +196,7 @@ auto main() -> int
     {
         std::cout << "> epoch: " <<  epoch << std::endl;
         train(epoch, model, device, *train_loader, optimizer, train_dataset_size);
-        //test(model, device, *test_loader, test_dataset_size);
+        test(model, device, *test_loader, test_dataset_size);
     }
 }
 #endif // UNIT_TEST
