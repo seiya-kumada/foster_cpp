@@ -1,0 +1,11 @@
+#!/bin/bash
+
+./build/ch_02_01 \
+        --batch_size 32 \
+        --epochs 10 \
+        --resume true \
+        --model_path /home/ubuntu/data/foster/ch02_01/model_e20.pt \
+        --opt_path /home/ubuntu/data/foster/ch02_01/opt_e20.pt \
+        --trained_model_path /home/ubuntu/data/foster/ch02_01/model_e10.pt \
+        --trained_opt_path /home/ubuntu/data/foster/ch02_01/opt_e10.pt \
+

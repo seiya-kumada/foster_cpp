@@ -4,6 +4,8 @@
 
 #include <boost/test/unit_test.hpp>
 #include <iostream>
+#include <chrono>
+#include <string>
 
 BOOST_AUTO_TEST_CASE(TEST_main)
 {
@@ -19,16 +21,30 @@ BOOST_AUTO_TEST_CASE(TEST_main)
 #include <boost/range/algorithm/copy.hpp>
 #include "architecture.h"
 #include <torch/torch.h>
-//#include <ATen/ATen.h>
-//#include <ATen/NativeFunctions.h>
-//#include <ATen/Dispatch.h>
-//#include <ATen/CPUApplyUtils.h>
+#include <boost/program_options.hpp>
 
 namespace fs = boost::filesystem;
+namespace po = boost::program_options;
 
 namespace
 {
     const fs::path DIR_PATH = fs::path("/home/ubuntu/data/cifar-10/cifar-10-batches-bin/");
+
+    po::options_description parse_arguments()
+    {
+        po::options_description desc {"ch02_01"};
+        desc.add_options()
+            ("help", "produce help messsage")
+            ("batch_size", po::value<int>(), "set batch size")
+            ("epochs", po::value<int>(), "set epochs")
+            ("resume", po::value<bool>()->default_value(false), "set true or false")
+            ("model_path", po::value<std::string>(), "set a path to the model")
+            ("opt_path", po::value<std::string>(), "set a path to the optimizer")
+            ("trained_model_path", po::value<std::string>(), "set a path to the trained model")
+            ("trained_opt_path", po::value<std::string>(), "set a path to the trained optimizer")
+        ;
+        return desc;
+    }
 
     const std::vector<fs::path> TRAIN_PATHS 
     {
@@ -60,9 +76,8 @@ namespace
         return {ifss};
     }
 
-    constexpr int BATCH_SIZE = 24;
-    constexpr int EPOCHS = 20;
-    constexpr int LOG_INTERVAL = 10;
+    constexpr int LOG_INTERVAL {10};
+    const std::string OUTPUT_DIR_PATH {"/home/ubuntu/data/foster/ch02_01"};
 
     template<typename DataLoader>
     void train(
@@ -73,14 +88,14 @@ namespace
         torch::optim::Optimizer&    optimizer,
         size_t                      dataset_size)
     {
-        model.train();
+        model->train();
         size_t batch_idx {0};
         for (auto& batch : data_loader)
         {
             auto data = batch.data.to(device);
             auto targets = batch.target.to(device);
             optimizer.zero_grad();
-            auto output = model.forward(data);
+            auto output = model->forward(data);
 
             auto batch_size = output.size(0);
             targets = targets.reshape({batch_size});
@@ -110,14 +125,14 @@ namespace
         size_t          dataset_size)
     {
         torch::NoGradGuard no_grad{};
-        model.eval();
+        model->eval();
         double test_loss {0};
         int32_t correct {0};
         for (const auto& batch : data_loader)
         {
             auto data = batch.data.to(device);
             auto targets = batch.target.to(device);
-            auto output = model.forward(data);
+            auto output = model->forward(data);
             auto batch_size = output.size(0);
             targets = targets.reshape({batch_size});
             test_loss += torch::nll_loss(
@@ -135,11 +150,59 @@ namespace
             test_loss,
             static_cast<double>(correct) / dataset_size);
     }
+
+    void print_parameters(const Architecture& model)
+    {
+        for (const auto& pair : model->named_parameters())
+        {
+            const auto& key = pair.key();
+            const auto& value = pair.value();
+            //<< ": " << pair.value().sizes() << std::endl;
+            auto c = 1;
+            for (const auto& v : value.sizes())
+            {
+                c *= v; 
+            }
+            std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
+        }
+    }
+
+    template<typename T>
+    inline const T extract_parameter(
+        const std::string& name,
+        const std::string& message,
+        const po::variables_map& vm)
+    {
+        if (vm.count(name))
+        {
+            return vm[name].as<T>();
+        }
+        else
+        {
+            throw std::runtime_error(message);
+        }
+    }
 }
 
 
-auto main() -> int
+auto main(int argc, const char* argv[]) -> int
 {
+    auto desc = parse_arguments();
+    po::variables_map vm {};
+    po::store(parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+    if (vm.empty() || vm.count("help"))
+    {
+        std::cout << desc << std::endl;
+        return 1;
+    }
+
+    const auto batch_size = extract_parameter<int>("batch_size", "invalid batch size", vm);
+    const auto epochs = extract_parameter<int>("epochs", "invalid epochs", vm);
+    const auto resumes = extract_parameter<bool>("resume", "invalid resume", vm);
+    auto model_path = extract_parameter<std::string>("model_path", "invalid path", vm);
+    auto opt_path = extract_parameter<std::string>("opt_path", "invalid path", vm);
+    
     //_/_/_/ Select device
 
     torch::manual_seed(1);
@@ -159,7 +222,8 @@ auto main() -> int
     //_/_/_/ Define a model
     
     Architecture model{32 * 32 * 3, 10};
-    model.to(device);
+    model->to(device);
+    print_parameters(model);
 
     //_/_/_/ Load the Data
 
@@ -172,31 +236,47 @@ auto main() -> int
             map(torch::data::transforms::Normalize<>(0, 255.0)).
             map(torch::data::transforms::Stack<>());
     const size_t test_dataset_size = test_dataset.size().value();
-    
+   
+    // TODO: どこでshuffleするんだろう？
     auto train_loader = torch::data::make_data_loader(
             std::move(train_dataset),
-            torch::data::DataLoaderOptions().batch_size(BATCH_SIZE).workers(2));
+            torch::data::DataLoaderOptions().batch_size(batch_size).workers(2));
 
     auto test_loader = torch::data::make_data_loader(
             std::move(test_dataset),
-            torch::data::DataLoaderOptions().batch_size(BATCH_SIZE).workers(2));
-
-    //std::cout <<  train_dataset_size << " " << test_dataset_size << std::endl;
+            torch::data::DataLoaderOptions().batch_size(batch_size).workers(2));
     
     //_/_/_/ Configure a optimizer
     
     torch::optim::Adam optimizer {
-        model.parameters(),
+        model->parameters(),
         torch::optim::AdamOptions(0.0005)
     };
 
     //_/_/_/ Train the model
+    
+    if (resumes)
+    {
+        std::cout << "resume training!" << std::endl;
+        auto trained_model_path = extract_parameter<std::string>("trained_model_path", "invalid path", vm);
+        auto trained_opt_path = extract_parameter<std::string>("trained_opt_path", "invalid path", vm);
+        torch::load(model, trained_model_path);
+        torch::load(optimizer, trained_opt_path);
+    }
 
-    for (auto epoch = 1; epoch <= EPOCHS; ++epoch)
+    auto start = std::chrono::system_clock::now();
+    for (auto epoch = 1; epoch <= epochs; ++epoch)
     {
         std::cout << "> epoch: " <<  epoch << std::endl;
         train(epoch, model, device, *train_loader, optimizer, train_dataset_size);
         test(model, device, *test_loader, test_dataset_size);
     }
+    auto end = std::chrono::system_clock::now();
+    std::cout << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << " [sec]" << std::endl;
+
+    //_/_/_/ Save the model
+    
+    torch::save(model, model_path);
+    torch::save(optimizer, opt_path);
 }
 #endif // UNIT_TEST

@@ -2,12 +2,12 @@
 #define ARCHITECTURE
 #include <torch/torch.h>
 
-class Architecture : public torch::nn::Module
+class ArchitectureImpl : public torch::nn::Module
 {
 public:
-    Architecture(int in_feature, int out_features);
-    Architecture(const Architecture&) = delete;
-    Architecture& operator=(const Architecture&) = delete;
+    ArchitectureImpl(int in_feature, int out_features);
+    ArchitectureImpl(const ArchitectureImpl&) = delete;
+    ArchitectureImpl& operator=(const ArchitectureImpl&) = delete;
 
     torch::Tensor forward(torch::Tensor x);
 
@@ -16,4 +16,7 @@ private:
     torch::nn::Linear   dense2_;
     torch::nn::Linear   dense3_;
 };
+
+TORCH_MODULE(Architecture);
+
 #endif // ARCHITECTURE

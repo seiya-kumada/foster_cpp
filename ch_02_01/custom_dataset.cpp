@@ -134,6 +134,7 @@ namespace
         for (auto& batch : *data_loader)
         {
             auto batch_size = batch.data.size(0);
+            BOOST_REQUIRE_EQUAL(batch.data.sizes(), (std::vector<std::int64_t>{32, 3, 32, 32}));
             BOOST_REQUIRE_EQUAL(BATCH_SIZE, batch_size);
             for (auto i = 0; i < batch_size; ++i)
             {

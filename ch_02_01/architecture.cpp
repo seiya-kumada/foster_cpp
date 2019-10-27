@@ -6,7 +6,7 @@ namespace
     constexpr int N_HIDDEN2 = 150;
 }
 
-Architecture::Architecture(int in_features, int out_features)
+ArchitectureImpl::ArchitectureImpl(int in_features, int out_features)
     : dense1_{in_features, N_HIDDEN1}
     , dense2_{N_HIDDEN1, N_HIDDEN2}
     , dense3_{N_HIDDEN2, out_features}
@@ -17,12 +17,12 @@ Architecture::Architecture(int in_features, int out_features)
 }
 
 
-torch::Tensor Architecture::forward(torch::Tensor x)
+torch::Tensor ArchitectureImpl::forward(torch::Tensor x)
 {
-    x = torch::flatten(x, 1); 
-    x = torch::relu(dense1_->forward(x));
-    x = torch::relu(dense2_->forward(x));
-    x = dense3_->forward(x);
+    x = torch::flatten(x, 1); // [batch_size, in_features]
+    x = torch::relu(dense1_->forward(x)); // [batch_size, N_HIDDEN1]
+    x = torch::relu(dense2_->forward(x)); // [batch_size, N_HIDDEN2]
+    x = dense3_->forward(x); // [batch_size, out_features]
     return torch::log_softmax(x, 1);
 }
 
@@ -31,21 +31,49 @@ torch::Tensor Architecture::forward(torch::Tensor x)
 
 namespace
 {
-    void test()
+    void test_0()
     {
         int in_features = 100;
         int out_features = 10;
 
         Architecture architecture{in_features, out_features};
-        auto s = architecture.parameters().size();
+        auto s = architecture->parameters().size();
         BOOST_CHECK_EQUAL(s, 6);
+    }
+
+    void test_1()
+    {
+        auto batch_size = 20;
+        auto row = 12;
+        auto col = 13;
+        auto cha = 3;
+        auto x = torch::ones({batch_size, cha, row, col});
+
+        int in_features = row * col * cha;
+        int out_features = 10;
+        Architecture architecture{in_features, out_features};
+        auto y = architecture->forward(x);
+        BOOST_CHECK_EQUAL((std::vector<int64_t>{batch_size, out_features}), y.sizes());
+        torch::save(architecture, "model.pt");
+    }
+
+    void test_2()
+    {
+        auto row = 12;
+        auto col = 13;
+        auto cha = 3;
+        int in_features = row * col * cha;
+        int out_features = 10;
+        Architecture architecture{in_features, out_features};
+        torch::load(architecture, "model.pt");
     }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_Architecture)
 {
     std::cout << "Architecture\n";
-    test();
+    test_0();
+    test_1();
 }
 
 #endif // UNIT_TEST_DatasetReader

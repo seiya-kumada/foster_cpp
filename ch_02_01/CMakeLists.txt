@@ -8,7 +8,7 @@ add_executable(${PROJ_NAME}
 
 find_package(OpenCV REQUIRED)
 find_package(Torch REQUIRED)
-find_package(Boost REQUIRED COMPONENTS unit_test_framework filesystem)
+find_package(Boost REQUIRED COMPONENTS unit_test_framework filesystem program_options)
 
 target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
