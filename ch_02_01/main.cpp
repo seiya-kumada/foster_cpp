@@ -28,7 +28,13 @@ namespace po = boost::program_options;
 
 namespace
 {
-    const fs::path DIR_PATH = fs::path("/home/ubuntu/data/cifar-10/cifar-10-batches-bin/");
+    const fs::path DIR_PATH             {"/home/ubuntu/data/cifar-10/cifar-10-batches-bin/"};
+    const std::string OUTPUT_DIR_PATH   {"/home/ubuntu/data/foster/ch02_01"};
+    constexpr int LOG_INTERVAL      {10};
+    constexpr int IMAGE_WIDTH       {32};
+    constexpr int IMAGE_HEIGHT      {32};
+    constexpr int IMAGE_CHANNELS    {3};
+    constexpr int CLASSES           {10};
 
     po::options_description parse_arguments()
     {
@@ -46,6 +52,22 @@ namespace
         return desc;
     }
 
+    template<typename T>
+    inline const T extract_parameter(
+        const std::string& name,
+        const std::string& message,
+        const po::variables_map& vm)
+    {
+        if (vm.count(name))
+        {
+            return vm[name].as<T>();
+        }
+        else
+        {
+            throw std::runtime_error(message);
+        }
+    }
+
     const std::vector<fs::path> TRAIN_PATHS 
     {
         DIR_PATH / "data_batch_1.bin",
@@ -60,8 +82,7 @@ namespace
         DIR_PATH / "test_batch.bin",
     };
 
-    auto load_dataset(const std::vector<fs::path>& paths)
-        -> CustomDataset
+    CustomDataset load_dataset(const std::vector<fs::path>& paths)
     {
         std::vector<std::ifstream> ifss{};
         boost::copy(
@@ -75,9 +96,6 @@ namespace
         );
         return {ifss};
     }
-
-    constexpr int LOG_INTERVAL {10};
-    const std::string OUTPUT_DIR_PATH {"/home/ubuntu/data/foster/ch02_01"};
 
     template<typename DataLoader>
     void train(
@@ -100,7 +118,7 @@ namespace
             auto batch_size = output.size(0);
             targets = targets.reshape({batch_size});
             auto loss = torch::nll_loss(output, targets);
-            // ここはクラスエントロピーを使えるはず。-> c++にはcross_entropy_lossが実装されていない。
+            // we should be able to use cross_entropy_loss -> unfortunately, cross_entropy_loss is not implemented in c++.
             AT_ASSERT(!std::isnan(loss.template item<float>()));
             loss.backward();
             optimizer.step();
@@ -166,27 +184,12 @@ namespace
             std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
         }
     }
-
-    template<typename T>
-    inline const T extract_parameter(
-        const std::string& name,
-        const std::string& message,
-        const po::variables_map& vm)
-    {
-        if (vm.count(name))
-        {
-            return vm[name].as<T>();
-        }
-        else
-        {
-            throw std::runtime_error(message);
-        }
-    }
 }
 
-
-auto main(int argc, const char* argv[]) -> int
+int main(int argc, const char* argv[])
 {
+    //_/_/_/ Extract arguments
+    
     auto desc = parse_arguments();
     po::variables_map vm {};
     po::store(parse_command_line(argc, argv, desc), vm);
@@ -221,7 +224,7 @@ auto main(int argc, const char* argv[]) -> int
 
     //_/_/_/ Define a model
     
-    Architecture model{32 * 32 * 3, 10};
+    Architecture model{IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS, CLASSES};
     model->to(device);
     print_parameters(model);
 
@@ -237,7 +240,7 @@ auto main(int argc, const char* argv[]) -> int
             map(torch::data::transforms::Stack<>());
     const size_t test_dataset_size = test_dataset.size().value();
    
-    // TODO: どこでshuffleするんだろう？
+    // memo: where is the shuffle executed?
     auto train_loader = torch::data::make_data_loader(
             std::move(train_dataset),
             torch::data::DataLoaderOptions().batch_size(batch_size).workers(2));
