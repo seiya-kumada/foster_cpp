@@ -113,26 +113,33 @@ namespace
             auto data = batch.data.to(device);
             auto targets = batch.target.to(device);
             optimizer.zero_grad();
+            
             auto output = model->forward(data);
-
+            auto pred = output.argmax(1);
+            
             auto batch_size = output.size(0);
             targets = targets.reshape({batch_size});
+            auto correct = pred.eq(targets).sum().template item<int64_t>();
+            
             auto loss = torch::nll_loss(output, targets);
             // we should be able to use cross_entropy_loss -> unfortunately, cross_entropy_loss is not implemented in c++.
             AT_ASSERT(!std::isnan(loss.template item<float>()));
             loss.backward();
             optimizer.step();
-
+#if 0
             if (batch_idx % LOG_INTERVAL == 0)
             {
-                std::printf("\rTrain Epoch: %ld [%5ld/%5ld] Loss: %.4f",
+                std::printf("\rTrain Epoch: %ld [%5ld/%5ld] Loss: %.4f | Accuracy: %.3f",
                     epoch,
                     batch_idx * batch.data.size(0),
                     dataset_size,
-                    loss.template item<float>());
+                    loss.template item<float>(),
+                    static_cast<double>(correct) / batch_size);
             }
+#endif
             ++batch_idx;
         }
+        //std::cout << std::endl;
     }
 
     template<typename DataLoader>
@@ -270,13 +277,12 @@ int main(int argc, const char* argv[])
     auto start = std::chrono::system_clock::now();
     for (auto epoch = 1; epoch <= epochs; ++epoch)
     {
-        std::cout << "> epoch: " <<  epoch << std::endl;
         train(epoch, model, device, *train_loader, optimizer, train_dataset_size);
-        test(model, device, *test_loader, test_dataset_size);
     }
     auto end = std::chrono::system_clock::now();
     std::cout << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << " [sec]" << std::endl;
 
+    test(model, device, *test_loader, test_dataset_size);
     //_/_/_/ Save the model
     
     torch::save(model, model_path);
