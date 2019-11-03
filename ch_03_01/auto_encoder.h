@@ -21,6 +21,8 @@ public:
     AutoEncoderImpl& operator=(const AutoEncoderImpl&) = delete;
 
     //torch::Tensor forward(torch::Tensor x);
+    torch::nn::Sequential& get_encoder();
+    torch::nn::Sequential& get_decoder();
 
 private:
     std::vector<int>    encoder_conv_filters_;
@@ -35,7 +37,12 @@ private:
     std::size_t         n_layers_encoder_;
     std::size_t         n_layers_decoder_;
 
+    torch::nn::Sequential encoder_;
+    torch::nn::Sequential decoder_;
+
     void build();
+    torch::nn::Sequential build_encoder();
+    torch::nn::Sequential build_decoder();
 };
 
 TORCH_MODULE(AutoEncoder);
