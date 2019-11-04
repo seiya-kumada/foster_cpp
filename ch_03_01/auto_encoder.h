@@ -20,7 +20,7 @@ public:
     AutoEncoderImpl(const AutoEncoderImpl&) = delete;
     AutoEncoderImpl& operator=(const AutoEncoderImpl&) = delete;
 
-    //torch::Tensor forward(torch::Tensor x);
+    torch::Tensor forward(torch::Tensor x);
     torch::nn::Sequential& get_encoder();
     torch::nn::Sequential& get_decoder();
 

@@ -12,8 +12,6 @@ find_package(Boost REQUIRED COMPONENTS unit_test_framework filesystem program_op
 target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
     UNIT_TEST=1
-    UNIT_TEST_DatasetReader=1
-    UNIT_TEST_CustomDataset=1
     UNIT_TEST_AutoEncoder=1
 )
 

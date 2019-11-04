@@ -32,6 +32,7 @@ AutoEncoderImpl::AutoEncoderImpl(
     , n_layers_encoder_{encoder_conv_filters.size()}
     , n_layers_decoder_{decoder_conv_filters.size()}
     , encoder_{nullptr}
+    , decoder_{nullptr}
 {
     build();
 }
@@ -49,7 +50,9 @@ torch::nn::Sequential& AutoEncoderImpl::get_decoder()
 void AutoEncoderImpl::build()
 {
     encoder_ = build_encoder();
+    register_module("encoder_", encoder_);
     decoder_ = build_decoder();
+    register_module("decoder_", decoder_);
 }
 
 torch::nn::Sequential AutoEncoderImpl::build_encoder()
@@ -163,12 +166,18 @@ torch::nn::Sequential AutoEncoderImpl::build_decoder()
     return decoder;
 }
 
+torch::Tensor AutoEncoderImpl::forward(torch::Tensor x)
+{
+    x = encoder_->forward(x);
+    return decoder_->forward(x);
+}
+
 #if(UNIT_TEST_AutoEncoder)
 #include <boost/test/unit_test.hpp>
 
 namespace
 {
-    void print_parameters(const torch::nn::Sequential& model)
+    void print_parameters(const AutoEncoder& model)
     {
         for (const auto& pair : model->named_parameters())
         {
@@ -210,11 +219,18 @@ namespace
         int col {28};
         auto x = torch::ones({batch_size, cha, row, col});
         auto y = ae->get_encoder()->forward(x);
-        BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{3, 2})); 
+        BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
         
-        auto s = torch::ones({batch_size, 2});
+        auto s = torch::ones({batch_size, z_dim});
         auto t = ae->get_decoder()->forward(s);
-        std::cout << t.sizes() << std::endl;
+        BOOST_CHECK_EQUAL(t.sizes(), (std::vector<int64_t>{batch_size, cha, row, col})); 
+
+        auto u = ae->forward(x);
+        BOOST_CHECK_EQUAL(u.sizes(), (std::vector<int64_t>{batch_size, cha, row, col})); 
+
+        auto size = ae->parameters().size();
+        std::cout << size << std::endl;
+        print_parameters(ae);
     }
 }
 
