@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
-set(PROJ_NAME ch_02_01)
+set(PROJ_NAME classify_cifar10)
 add_executable(${PROJ_NAME} 
     ./main.cpp 
     ./custom_dataset.cpp
@@ -34,7 +34,7 @@ set(LIBRARIES
 include_directories(${INCLUDE_DIRS})
 target_link_libraries (${PROJ_NAME} ${LIBRARIES})
 
-set_property(TARGET ch_02_01 PROPERTY CXX_STANDARD 14)
+set_property(TARGET ${PROJ_NAME} PROPERTY CXX_STANDARD 14)
 message(STATUS ${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
 message(STATUS ${Boost_LIBRARY_DIRS})

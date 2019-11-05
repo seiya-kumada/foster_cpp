@@ -7,17 +7,20 @@ namespace
 }
 
 ArchitectureImpl::ArchitectureImpl(int in_features, int out_features)
-    : dense1_{in_features, N_HIDDEN1}
+    //: dense1_{in_features, N_HIDDEN1}
+    //, dense2_{N_HIDDEN1, N_HIDDEN2}
+    //, dense3_{N_HIDDEN2, out_features}
+    : dense1_{register_module("dense1_", torch::nn::Linear{in_features, N_HIDDEN1})}
     , dense2_{N_HIDDEN1, N_HIDDEN2}
     , dense3_{N_HIDDEN2, out_features}
 {
-    register_module("dense1_", dense1_);
+    //register_module("dense1_", dense1_);
     register_module("dense2_", dense2_);
     register_module("dense3_", dense3_);
 }
 
 
-torch::Tensor ArchitectureImpl::forward(torch::Tensor x)
+torch::Tensor ArchitectureImpl::forward_(torch::Tensor x)
 {
     x = torch::flatten(x, 1); // [batch_size, in_features]
     x = torch::relu(dense1_->forward(x)); // [batch_size, N_HIDDEN1]

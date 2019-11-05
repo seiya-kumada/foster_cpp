@@ -48,6 +48,7 @@ namespace
             ("opt_path", po::value<std::string>(), "set a path to the optimizer")
             ("trained_model_path", po::value<std::string>(), "set a path to the trained model")
             ("trained_opt_path", po::value<std::string>(), "set a path to the trained optimizer")
+            ("verbose", po::value<bool>()->default_value(false), "set true or false")
         ;
         return desc;
     }
@@ -104,7 +105,8 @@ namespace
         torch::Device               device,
         DataLoader&                 data_loader,
         torch::optim::Optimizer&    optimizer,
-        size_t                      dataset_size)
+        size_t                      dataset_size,
+        bool                        verbose)
     {
         model->train();
         size_t batch_idx {0};
@@ -114,7 +116,7 @@ namespace
             auto targets = batch.target.to(device);
             optimizer.zero_grad();
             
-            auto output = model->forward(data);
+            auto output = model->forward_(data);
             auto pred = output.argmax(1);
             
             auto batch_size = output.size(0);
@@ -126,8 +128,8 @@ namespace
             AT_ASSERT(!std::isnan(loss.template item<float>()));
             loss.backward();
             optimizer.step();
-#if 0
-            if (batch_idx % LOG_INTERVAL == 0)
+
+            if (verbose && (batch_idx % LOG_INTERVAL == 0))
             {
                 std::printf("\rTrain Epoch: %ld [%5ld/%5ld] Loss: %.4f | Accuracy: %.3f",
                     epoch,
@@ -136,10 +138,9 @@ namespace
                     loss.template item<float>(),
                     static_cast<double>(correct) / batch_size);
             }
-#endif
+
             ++batch_idx;
         }
-        //std::cout << std::endl;
     }
 
     template<typename DataLoader>
@@ -147,7 +148,8 @@ namespace
         Architecture&   model,
         torch::Device   device,
         DataLoader&     data_loader,
-        size_t          dataset_size)
+        size_t          dataset_size,
+        bool            verbose)
     {
         torch::NoGradGuard no_grad{};
         model->eval();
@@ -157,7 +159,7 @@ namespace
         {
             auto data = batch.data.to(device);
             auto targets = batch.target.to(device);
-            auto output = model->forward(data);
+            auto output = model->forward_(data);
             auto batch_size = output.size(0);
             targets = targets.reshape({batch_size});
             test_loss += torch::nll_loss(
@@ -170,14 +172,18 @@ namespace
         }
 
         test_loss /= dataset_size;
-        std::printf(
-            "\nTest set: Average loss: %.4f | Accuracy: %.3f\n",
-            test_loss,
-            static_cast<double>(correct) / dataset_size);
+        if (verbose)
+        {
+            std::printf(
+                "\nTest set: Average loss: %.4f | Accuracy: %.3f\n\n",
+                test_loss,
+                static_cast<double>(correct) / dataset_size);
+        }
     }
 
     void print_parameters(const Architecture& model)
     {
+        int s {0};
         for (const auto& pair : model->named_parameters())
         {
             const auto& key = pair.key();
@@ -189,9 +195,12 @@ namespace
                 c *= v; 
             }
             std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
+            s += c;
         }
+        std::cout << "total number of parameters: " << s << std::endl;
     }
 }
+class A {};
 
 int main(int argc, const char* argv[])
 {
@@ -210,8 +219,9 @@ int main(int argc, const char* argv[])
     const auto batch_size = extract_parameter<int>("batch_size", "invalid batch size", vm);
     const auto epochs = extract_parameter<int>("epochs", "invalid epochs", vm);
     const auto resumes = extract_parameter<bool>("resume", "invalid resume", vm);
-    auto model_path = extract_parameter<std::string>("model_path", "invalid path", vm);
-    auto opt_path = extract_parameter<std::string>("opt_path", "invalid path", vm);
+    const auto model_path = extract_parameter<std::string>("model_path", "invalid path", vm);
+    const auto opt_path = extract_parameter<std::string>("opt_path", "invalid path", vm);
+    const auto verbose = extract_parameter<bool>("verbose", "invalid verbose", vm);
     
     //_/_/_/ Select device
 
@@ -230,29 +240,28 @@ int main(int argc, const char* argv[])
     torch::Device device{device_type};
 
     //_/_/_/ Define a model
-    
     Architecture model{IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS, CLASSES};
     model->to(device);
     print_parameters(model);
 
     //_/_/_/ Load the Data
 
-    auto train_dataset = load_dataset(TRAIN_PATHS).
+    const auto train_dataset = load_dataset(TRAIN_PATHS).
             map(torch::data::transforms::Normalize<>(0, 255.0)).
             map(torch::data::transforms::Stack<>());
     const size_t train_dataset_size = train_dataset.size().value();
 
-    auto test_dataset = load_dataset(TEST_PATHS).
+    const auto test_dataset = load_dataset(TEST_PATHS).
             map(torch::data::transforms::Normalize<>(0, 255.0)).
             map(torch::data::transforms::Stack<>());
     const size_t test_dataset_size = test_dataset.size().value();
    
     // memo: where is the shuffle executed?
-    auto train_loader = torch::data::make_data_loader(
+    const auto train_loader = torch::data::make_data_loader(
             std::move(train_dataset),
             torch::data::DataLoaderOptions().batch_size(batch_size).workers(2));
 
-    auto test_loader = torch::data::make_data_loader(
+    const auto test_loader = torch::data::make_data_loader(
             std::move(test_dataset),
             torch::data::DataLoaderOptions().batch_size(batch_size).workers(2));
     
@@ -268,21 +277,21 @@ int main(int argc, const char* argv[])
     if (resumes)
     {
         std::cout << "resume training!" << std::endl;
-        auto trained_model_path = extract_parameter<std::string>("trained_model_path", "invalid path", vm);
-        auto trained_opt_path = extract_parameter<std::string>("trained_opt_path", "invalid path", vm);
+        const auto trained_model_path = extract_parameter<std::string>("trained_model_path", "invalid path", vm);
+        const auto trained_opt_path = extract_parameter<std::string>("trained_opt_path", "invalid path", vm);
         torch::load(model, trained_model_path);
         torch::load(optimizer, trained_opt_path);
     }
 
-    auto start = std::chrono::system_clock::now();
+    const auto start = std::chrono::system_clock::now();
     for (auto epoch = 1; epoch <= epochs; ++epoch)
     {
-        train(epoch, model, device, *train_loader, optimizer, train_dataset_size);
+        train(epoch, model, device, *train_loader, optimizer, train_dataset_size, verbose);
+        test(model, device, *test_loader, test_dataset_size, verbose);
     }
-    auto end = std::chrono::system_clock::now();
+    const auto end = std::chrono::system_clock::now();
     std::cout << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << " [sec]" << std::endl;
 
-    test(model, device, *test_loader, test_dataset_size);
     //_/_/_/ Save the model
     
     torch::save(model, model_path);
