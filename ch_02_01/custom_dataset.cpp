@@ -103,6 +103,9 @@ namespace
             BOOST_REQUIRE_EQUAL(l.item<int64_t>(), answers[i]); 
         }
     }
+   
+    template<typename T>
+    struct Type;
 
     void test_1()
     {
@@ -159,6 +162,70 @@ namespace
             }
         }
     }
+
+    void test_2()
+    {
+        torch::Tensor a = torch::ones({2, 3});
+        std::cout << "a: " << a << std::endl;
+        auto b = a;
+        a[0,0] = 100;
+        std::cout << "a: " << a << std::endl;
+        std::cout << "b: " << b << std::endl;
+    }
+
+
+    void test_3()
+    {
+        torch::manual_seed(1);
+        std::vector<std::ifstream> ifss{};
+        boost::copy(
+            PATHS | boost::adaptors::transformed(
+                [](const auto& p)
+                {
+                    return std::ifstream{p.string(), std::ios::binary};
+                }
+            ), 
+            std::back_inserter(ifss)
+        );
+
+        auto ds = CustomDataset{ifss}.
+            map(torch::data::transforms::Normalize<>(0, 255.0))
+            ;
+        constexpr int BATCH_SIZE = 32;
+        Type<decltype(ds)> h;
+        auto data_loader = torch::data::make_data_loader(
+                std::move(ds),
+                torch::data::DataLoaderOptions().batch_size(BATCH_SIZE).workers(2).drop_last(true));
+        int c = 0; 
+        const std::vector<int> answers = {4, 5, 3, 4, 6};
+        for (auto& batch : *data_loader)
+        {
+            auto batch_size = batch.size();
+            BOOST_CHECK_EQUAL(batch_size, BATCH_SIZE);
+            for (auto i = 0; i < batch_size; ++i)
+            {
+                const auto& target = batch[i].target;
+                const auto& data = batch[i].data;
+                BOOST_REQUIRE_EQUAL(3, data.size(0));
+                BOOST_REQUIRE_EQUAL(32, data.size(1));
+                BOOST_REQUIRE_EQUAL(32, data.size(2));
+                auto v =  data[0][0][0].item<float>();
+                BOOST_CHECK(0.0 <= v && v <= 1.0);
+            //    //std::cout << target.sizes() << std::endl;
+                BOOST_CHECK(answers[c] == target.item<int64_t>());
+                c += 1;
+                if (c == 5)
+                {
+                    break;
+                }
+            }
+            if (c == 5)
+            {
+                break;
+            }
+        }
+        
+    }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_CustomDataset)
@@ -166,6 +233,7 @@ BOOST_AUTO_TEST_CASE(TEST_CustomDataset)
     std::cout << "CustomDataset\n";
     test_0();
     test_1();
+    test_3();
 }
 
 #endif // UNIT_TEST_CustomDataset

@@ -20,7 +20,7 @@ ArchitectureImpl::ArchitectureImpl(int in_features, int out_features)
 }
 
 
-torch::Tensor ArchitectureImpl::forward_(torch::Tensor x)
+torch::Tensor ArchitectureImpl::forward(torch::Tensor x)
 {
     x = torch::flatten(x, 1); // [batch_size, in_features]
     x = torch::relu(dense1_->forward(x)); // [batch_size, N_HIDDEN1]
@@ -69,6 +69,45 @@ namespace
         int out_features = 10;
         Architecture architecture{in_features, out_features};
         torch::load(architecture, "model.pt");
+    }
+
+    template<typename Derived>
+    class Base
+    {
+    public:
+        void interface()
+        {
+            static_cast<Derived*>(this)->implementation();
+        }
+
+        void implementation()
+        {
+            std::cout << "Base::implementation" << std::endl;
+        }
+    };
+
+
+    class Derived_1 : public Base<Derived_1>
+    {
+    public:
+        void implementation()
+        {
+            std::cout << "Derived_1::implementation" << std::endl;
+        }
+    };
+
+    class Derived_2 : public Base<Derived_2>
+    {
+    public:
+    };
+
+
+    void test_3()
+    {
+        Derived_1 d1{};
+        d1.interface();
+        Derived_2 d2{};
+        d2.interface();
     }
 }
 
