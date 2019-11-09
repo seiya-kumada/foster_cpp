@@ -2,11 +2,11 @@
 
 ./build/classify_cifar10 \
         --batch_size 32 \
-        --epochs 20 \
+        --epochs 10 \
         --resume false \
         --model_path /home/ubuntu/data/foster/ch02_01/model_e10.pt \
         --opt_path /home/ubuntu/data/foster/ch02_01/opt_e10.pt \
-        --verbose true \
-#        --trained_model_path /home/ubuntu/data/foster/ch02_01/model_e10.pt \
-#        --trained_opt_path /home/ubuntu/data/foster/ch02_01/opt_e10.pt \
+        --verbose false \
+        --trained_model_path /home/ubuntu/data/foster/ch02_01/model_e10.pt \
+        --trained_opt_path /home/ubuntu/data/foster/ch02_01/opt_e10.pt \
 

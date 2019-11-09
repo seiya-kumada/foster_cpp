@@ -35,6 +35,7 @@ namespace
     constexpr int IMAGE_HEIGHT      {32};
     constexpr int IMAGE_CHANNELS    {3};
     constexpr int CLASSES           {10};
+    constexpr double LEARNING_RATE  {0.0005};
 
     po::options_description parse_arguments()
     {
@@ -116,7 +117,7 @@ namespace
             auto targets = batch.target.to(device);
             optimizer.zero_grad();
             
-            auto output = model->forward_(data);
+            auto output = model->forward(data);
             auto pred = output.argmax(1);
             
             auto batch_size = output.size(0);
@@ -159,7 +160,7 @@ namespace
         {
             auto data = batch.data.to(device);
             auto targets = batch.target.to(device);
-            auto output = model->forward_(data);
+            auto output = model->forward(data);
             auto batch_size = output.size(0);
             targets = targets.reshape({batch_size});
             test_loss += torch::nll_loss(
@@ -200,7 +201,6 @@ namespace
         std::cout << "total number of parameters: " << s << std::endl;
     }
 }
-class A {};
 
 int main(int argc, const char* argv[])
 {
@@ -240,6 +240,7 @@ int main(int argc, const char* argv[])
     torch::Device device{device_type};
 
     //_/_/_/ Define a model
+
     Architecture model{IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS, CLASSES};
     model->to(device);
     print_parameters(model);
@@ -269,7 +270,7 @@ int main(int argc, const char* argv[])
     
     torch::optim::Adam optimizer {
         model->parameters(),
-        torch::optim::AdamOptions(0.0005)
+        torch::optim::AdamOptions(LEARNING_RATE)
     };
 
     //_/_/_/ Train the model

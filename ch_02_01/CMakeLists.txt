@@ -12,10 +12,10 @@ find_package(Boost REQUIRED COMPONENTS unit_test_framework filesystem program_op
 
 target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
-    UNIT_TEST=1
-    UNIT_TEST_DatasetReader=1
-    UNIT_TEST_CustomDataset=1
-    UNIT_TEST_Architecture=1
+    UNIT_TEST=0
+    UNIT_TEST_DatasetReader=0
+    UNIT_TEST_CustomDataset=0
+    UNIT_TEST_Architecture=0
 )
 
 set(INCLUDE_DIRS
