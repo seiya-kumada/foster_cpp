@@ -11,21 +11,22 @@ BOOST_AUTO_TEST_CASE(TEST_main)
 
 #else
 
-
+// 遅い!
 
 #include <torch/torch.h>
 #include <string>
 #include <iostream>
 #include "auto_encoder.h"
+#include <chrono>
 
 namespace
 {
     const std::string DATA_DIR_PATH {"/home/ubuntu/data/mnist"};
-    constexpr int64_t TRAIN_BATCH_SIZE {32};
-    constexpr int64_t TEST_BATCH_SIZE {32};
-    constexpr double  LEARNING_RATE {0.0005};
-    constexpr int64_t EPOCHS {10};
-    constexpr int LOG_INTERVAL      {10};
+    constexpr int64_t TRAIN_BATCH_SIZE  {32};
+    constexpr int64_t TEST_BATCH_SIZE   {32};
+    constexpr double  LEARNING_RATE     {0.0005};
+    constexpr int64_t EPOCHS            {10};
+    constexpr int LOG_INTERVAL          {10};
 
     AutoEncoder make_model()
     {
@@ -65,6 +66,7 @@ namespace
             optimizer.zero_grad();
             auto output = model->forward(data);
             auto loss = torch::mse_loss(output, data);
+
             AT_ASSERT(!std::isnan(loss.template item<float>()));
             loss.backward();
             optimizer.step();
@@ -165,10 +167,13 @@ int main(int argc, const char* argv[])
 
     //_/_/_/ Train the model
 
+    const auto start = std::chrono::system_clock::now();
     for (auto epoch = 1; epoch <= EPOCHS; ++epoch)
     {
         train(epoch, model, device, *train_loader, optimizer, train_dataset_size);
     }
+    const auto end = std::chrono::system_clock::now();
+    std::cout << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << " [sec]" << std::endl;
     //test(model, device, *test_loader, test_dataset_size);
 
     return 0;

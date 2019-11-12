@@ -159,10 +159,11 @@ torch::nn::Sequential AutoEncoderImpl::build_decoder()
         else
         {
             decoder->push_back(
-                torch::nn::Functional(torch::softmax, 1, c10::nullopt)
+                torch::nn::Functional(torch::sigmoid)
             );
         }
-    } 
+    }
+
     return decoder;
 }
 
@@ -213,24 +214,20 @@ namespace
             z_dim, 
         };
 
-        int batch_size {3};
+        int batch_size {1};
         int cha {1};
         int row {28};
         int col {28};
-        auto x = torch::ones({batch_size, cha, row, col});
+        auto x = torch::zeros({batch_size, cha, row, col});
         auto y = ae->get_encoder()->forward(x);
         BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
         
-        auto s = torch::ones({batch_size, z_dim});
+        auto s = 2 * torch::ones({batch_size, z_dim});
         auto t = ae->get_decoder()->forward(s);
         BOOST_CHECK_EQUAL(t.sizes(), (std::vector<int64_t>{batch_size, cha, row, col})); 
-
+        
         auto u = ae->forward(x);
         BOOST_CHECK_EQUAL(u.sizes(), (std::vector<int64_t>{batch_size, cha, row, col})); 
-
-        auto size = ae->parameters().size();
-        std::cout << size << std::endl;
-        print_parameters(ae);
     }
 }
 
