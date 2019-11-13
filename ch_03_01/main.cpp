@@ -18,6 +18,8 @@ BOOST_AUTO_TEST_CASE(TEST_main)
 #include <iostream>
 #include "auto_encoder.h"
 #include <chrono>
+#include <boost/filesystem.hpp>
+namespace fs = boost::filesystem;
 
 namespace
 {
@@ -25,8 +27,9 @@ namespace
     constexpr int64_t TRAIN_BATCH_SIZE  {32};
     constexpr int64_t TEST_BATCH_SIZE   {32};
     constexpr double  LEARNING_RATE     {0.0005};
-    constexpr int64_t EPOCHS            {10};
+    constexpr int64_t EPOCHS            {1};
     constexpr int LOG_INTERVAL          {10};
+    const std::string OUTPUT_DIR_PATH {"/home/ubuntu/data/foster/ch03_01/"};
 
     AutoEncoder make_model()
     {
@@ -176,6 +179,11 @@ int main(int argc, const char* argv[])
     std::cout << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << " [sec]" << std::endl;
     //test(model, device, *test_loader, test_dataset_size);
 
+    const auto model_path = fs::path(OUTPUT_DIR_PATH) / "model.pt";
+    const auto opt_path = fs::path(OUTPUT_DIR_PATH) / "optimizer.pt";
+    torch::save(model, model_path.string());
+    torch::save(optimizer, opt_path.string());
+    
     return 0;
 }
 #endif // UNIT_TEST
