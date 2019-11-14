@@ -7,13 +7,14 @@ namespace fs = boost::filesystem;
 
 namespace
 {
-    const std::string DATA_DIR_PATH {"/home/ubuntu/data/mnist"};
-    const std::string MODEL_DIR_PATH {"/home/ubuntu/data/foster/ch03_01/"};
-    constexpr int IMAGE_WIDTH       {32};
-    constexpr int IMAGE_HEIGHT      {32};
-    constexpr int IMAGE_CHANNELS    {3};
-    constexpr int CLASSES           {10};
+    const std::string DATA_DIR_PATH     {"/home/ubuntu/data/mnist"};
+    const std::string MODEL_DIR_PATH    {"/home/ubuntu/data/foster/ch03_01/"};
+    constexpr int IMAGE_WIDTH           {32};
+    constexpr int IMAGE_HEIGHT          {32};
+    constexpr int IMAGE_CHANNELS        {3};
+    constexpr int CLASSES               {10};
     constexpr double  LEARNING_RATE     {0.0005};
+    constexpr int   TEST_BATCH_SIZE     {10};
 
     AutoEncoder make_model()
     {
@@ -35,7 +36,6 @@ namespace
             z_dim 
         };
     }
-
 
     std::vector<double> generate_random(int n, int max_value)
     {
@@ -89,13 +89,24 @@ int main(int argc, const char* argv[])
     auto test_dataset = torch::data::datasets::MNIST(
         DATA_DIR_PATH, 
         torch::data::datasets::MNIST::Mode::kTest
-    );
-    const size_t test_dataset_size = test_dataset.size().value();
-    auto random_values = generate_random(10, test_dataset_size);
-    for (auto& v : random_values)
-    {
-        test_dataset.get(v);
-    }
+    ).map(torch::data::transforms::Stack<>());
+
+    auto test_loader = torch::data::make_data_loader(std::move(test_dataset), TEST_BATCH_SIZE);
+    auto i = test_loader->begin();
+    const auto data = i->data.to(device);
+    const auto target = i->target.to(device);
+
+    //_/_/_/ Encode 
+
+    auto z_points = model->get_encoder()->forward(data);
+    std::cout << z_points.sizes() << std::endl;
+
+    //_/_/_/ Decode 
+    
+    auto reconstructed_images = model->get_decoder()->forward(z_points);
+    std::cout << reconstructed_images.sizes() << std::endl;
+
+    
 
     return 0;
 }
