@@ -2,6 +2,8 @@
 #include <boost/filesystem.hpp>
 #include "auto_encoder.h"
 #include <random>
+#include <opencv2/opencv.hpp>
+#include <boost/format.hpp>
 
 namespace fs = boost::filesystem;
 
@@ -15,6 +17,7 @@ namespace
     constexpr int CLASSES               {10};
     constexpr double  LEARNING_RATE     {0.0005};
     constexpr int   TEST_BATCH_SIZE     {10};
+    const std::string OUTPUT_DIR_PATH   {"/home/ubuntu/data/foster/ch03_02"};
 
     AutoEncoder make_model()
     {
@@ -46,6 +49,41 @@ namespace
             return dist(engine); 
         });
         return values;
+    }
+
+    template<typename T>
+    struct Type;
+
+    cv::Mat convert_to_mat(torch::Tensor image)
+    {
+        
+        const auto& img = image[0]; 
+        const int rows = img.size(0);
+        const int cols = img.size(1);
+        cv::Mat mat (rows, cols, CV_8UC1); 
+        for (auto j = 0; j < rows; ++j)
+        {
+            auto ptr = mat.ptr<std::uint8_t>(j);
+            const auto& dst = img[j];
+            for (auto i = 0; i < cols; ++i)
+            {
+                ptr[i] = cv::saturate_cast<std::uint8_t>(255 * dst[i].item<double>());
+            }
+        }
+        return mat;
+    }
+
+    void save_images(const torch::Tensor& tensor, const std::string& pre)
+    {
+        const auto size = tensor.size(0);
+        fs::path dir_path {OUTPUT_DIR_PATH};
+        for (auto i = 0; i < size; ++i)
+        {
+            const auto& image = tensor[i];
+            const auto mat = convert_to_mat(image);        
+            const auto path = dir_path / (boost::format("%s_%02d.jpg") % pre % i).str();
+            cv::imwrite(path.string(), mat);
+        }
     }
 }
 
@@ -106,7 +144,11 @@ int main(int argc, const char* argv[])
     auto reconstructed_images = model->get_decoder()->forward(z_points);
     std::cout << reconstructed_images.sizes() << std::endl;
 
-    
+    //_/_/_/ Convert to images
+
+    save_images(data, "ori");
+    save_images(reconstructed_images, "rec");
+
 
     return 0;
 }
