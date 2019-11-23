@@ -3,7 +3,9 @@
 namespace
 {
     constexpr int ENCODER_START_CHANNELS    {1};
+    constexpr int DECODER_START_CHANNELS    {64};
     constexpr int FLATTEN_SIZE              {3136};
+    const std::vector<int64_t> BEFORE_FLATTEN_SIZE  {64, 7, 7};
 }
 
 VariationalAutoEncoderImpl::VariationalAutoEncoderImpl(
@@ -46,10 +48,20 @@ torch::nn::Sequential& VariationalAutoEncoderImpl::get_decoder()
     return decoder_;
 }
 
+torch::nn::Linear& VariationalAutoEncoderImpl::get_mu_linear()
+{
+    return mu_linear_;
+}
+
+torch::nn::Linear& VariationalAutoEncoderImpl::get_log_var_linear()
+{
+    return log_var_linear_;
+}
+
 void VariationalAutoEncoderImpl::build()
 {
     encoder_ = build_encoder();
-
+    decoder_ = build_decoder();
 }
 
 namespace
@@ -68,6 +80,7 @@ torch::Tensor VariationalAutoEncoderImpl::forward(torch::Tensor x)
     auto mu = mu_linear_->forward(x);
     auto log_var = log_var_linear_->forward(x);
     x = sample(mu, log_var, z_dim_);
+    x = decoder_->forward(x);
     return x;
 }
 
@@ -111,3 +124,165 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder()
     );
     return encoder;
 }
+
+namespace
+{
+    inline torch::Tensor reshape(torch::Tensor x, torch::IntArrayRef shape)
+    {
+        const auto s = x.sizes(); // batch size
+        return x.reshape({s[0], shape[0], shape[1], shape[2]});
+    }
+}
+
+torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder()
+{
+    // (batch_size, z_dim)
+    torch::nn::Sequential decoder {};
+
+    decoder->push_back(
+        torch::nn::Linear(z_dim_, FLATTEN_SIZE)
+    );
+   
+    decoder->push_back(
+        torch::nn::Functional(reshape, BEFORE_FLATTEN_SIZE)
+    );
+
+    int in_channels = DECODER_START_CHANNELS;
+    for (auto i = 0; i < n_layers_decoder_; ++i)
+    {
+        auto out_channels = decoder_conv_filters_[i];
+        decoder->push_back(
+            torch::nn::Conv2d(
+                torch::nn::Conv2dOptions(in_channels, out_channels, decoder_conv_kernel_sizes_[i])
+                    .stride(decoder_conv_strides_[i])
+                    .padding(1)
+                    .output_padding(decoder_conv_strides_[i] + 2 * 1 - decoder_conv_kernel_sizes_[i])
+                    .transposed(true)
+            )
+        );
+        
+        if (i < n_layers_decoder_ - 1)
+        {
+            if (uses_batch_norm_)
+            {
+                decoder->push_back(
+                    torch::nn::BatchNorm(decoder_conv_filters_[i])
+                );
+            }
+
+            decoder->push_back(
+                torch::nn::Functional(torch::leaky_relu, 0.3)
+            );
+            
+            if (uses_dropout_)
+            {
+                decoder->push_back(
+                    torch::nn::Dropout(0.25)
+                );
+            }
+        }
+        else
+        {
+            decoder->push_back(
+                torch::nn::Functional(torch::sigmoid)
+            );
+        }
+        in_channels = out_channels;
+    }
+
+    return decoder;
+}
+
+#if(UNIT_TEST_VariationalAutoEncoder)
+#include <boost/test/unit_test.hpp>
+#include <vector>
+
+namespace
+{
+    template<typename M>
+    void print_parameters(const M& model) //VariationalAutoEncoder& model)
+    {
+        int s {0};
+        for (const auto& pair : model->named_parameters())
+        {
+            const auto& key = pair.key();
+            const auto& value = pair.value();
+            //<< ": " << pair.value().sizes() << std::endl;
+            auto c = 1;
+            for (const auto& v : value.sizes())
+            {
+                c *= v; 
+            }
+            std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
+            s += c;
+        }
+        std::cout << "> total number of parameters: " << s << std::endl;
+    }
+
+    void test_0()
+    {
+        std::vector<int> encoder_conv_filters       {32, 64, 64,  64};
+        std::vector<int> encoder_conv_kernel_sizes  { 3,  3,  3,  3};
+        std::vector<int> encoder_conv_strides       { 1,  2,  2,  1};
+        std::vector<int> decoder_conv_filters       {64, 64, 32,  1};
+        std::vector<int> decoder_conv_kernel_sizes  { 3,  3,  3,  3};
+        std::vector<int> decoder_conv_strides       { 1,  2,  2,  1};
+        int z_dim {2};
+
+        VariationalAutoEncoder vae {  
+            std::move(encoder_conv_filters),
+            std::move(encoder_conv_kernel_sizes),
+            std::move(encoder_conv_strides),
+            std::move(decoder_conv_filters),
+            std::move(decoder_conv_kernel_sizes),
+            std::move(decoder_conv_strides),
+            z_dim 
+        };
+
+        int batch_size {1};
+        int cha {1};
+        int row {28};
+        int col {28};
+        auto x = torch::zeros({batch_size, cha, row, col});
+        auto y = vae->get_encoder()->forward(x);
+        // 7x7x64=3136
+        BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, FLATTEN_SIZE})); 
+
+        auto mu = vae->get_mu_linear()->forward(y);
+        BOOST_CHECK_EQUAL(mu.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
+        auto log_var = vae->get_log_var_linear()->forward(y);
+        BOOST_CHECK_EQUAL(log_var.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
+
+        mu = torch::zeros({batch_size, z_dim});
+        log_var = torch::zeros({batch_size, z_dim});
+        //std::cout << mu << std::endl;
+        //std::cout << log_var << std::endl;
+        
+        auto z = sample(mu, log_var, z_dim);
+        BOOST_CHECK_EQUAL(z.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
+        
+        z = sample(mu, log_var, z_dim);
+        BOOST_CHECK_EQUAL(z.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
+        
+        x = torch::zeros({batch_size, FLATTEN_SIZE});
+        y = torch::nn::Functional(reshape, BEFORE_FLATTEN_SIZE)(x);
+        BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, 64, 7, 7})); 
+
+        x = torch::zeros({batch_size, cha, row, col});
+        y = vae->forward(x);
+        BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, cha, row, col})); 
+
+        //print_parameters(vae);
+        //print_parameters(vae->get_encoder());
+        //print_parameters(vae->get_decoder());
+    }
+}
+
+
+BOOST_AUTO_TEST_CASE(TEST_VariationalAutoEncoder)
+{
+    std::cout << "VariationalAutoEncoder\n";
+    test_0();
+}
+
+#endif // UNIT_TEST_VariationalAutoEncoder

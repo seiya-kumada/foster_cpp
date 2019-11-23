@@ -23,6 +23,8 @@ public:
     torch::Tensor forward(torch::Tensor x);
     torch::nn::Sequential& get_encoder();
     torch::nn::Sequential& get_decoder();
+    torch::nn::Linear& get_mu_linear();
+    torch::nn::Linear& get_log_var_linear();
 
 private:
     std::vector<int>    encoder_conv_filters_;
@@ -44,7 +46,7 @@ private:
 
     void build();
     torch::nn::Sequential build_encoder();
-    //torch::nn::Sequential build_decoder();
+    torch::nn::Sequential build_decoder();
 };
 
 TORCH_MODULE(VariationalAutoEncoder);
