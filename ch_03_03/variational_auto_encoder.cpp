@@ -74,14 +74,14 @@ namespace
     }
 }
 
-torch::Tensor VariationalAutoEncoderImpl::forward(torch::Tensor x)
+auto VariationalAutoEncoderImpl::forward(torch::Tensor x) -> std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
 {
     x = encoder_->forward(x);
-    auto mu = mu_linear_->forward(x);
-    auto log_var = log_var_linear_->forward(x);
+    const auto mu = mu_linear_->forward(x);
+    const auto log_var = log_var_linear_->forward(x);
     x = sample(mu, log_var, z_dim_);
     x = decoder_->forward(x);
-    return x;
+    return std::make_tuple(x, mu, log_var);
 }
 
 torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder()
@@ -239,7 +239,7 @@ namespace
             z_dim 
         };
 
-        int batch_size {1};
+        int batch_size {2};
         int cha {1};
         int row {28};
         int col {28};
@@ -268,13 +268,24 @@ namespace
         y = torch::nn::Functional(reshape, BEFORE_FLATTEN_SIZE)(x);
         BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, 64, 7, 7})); 
 
+        torch::Tensor dummy1 {};
+        torch::Tensor dummy2 {};
         x = torch::zeros({batch_size, cha, row, col});
-        y = vae->forward(x);
+        std::tie(y, dummy1, dummy2) = vae->forward(x);
         BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, cha, row, col})); 
 
-        //print_parameters(vae);
-        //print_parameters(vae->get_encoder());
-        //print_parameters(vae->get_decoder());
+        x = 2 * torch::ones({batch_size, z_dim});
+        auto w = x.sum({1});
+        BOOST_CHECK_EQUAL(w.sizes(), (std::vector<int64_t>{batch_size})); 
+
+        w = x * x;
+        BOOST_CHECK_EQUAL(w.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
+        BOOST_CHECK_EQUAL(4, w[0][0].item<double>());
+        BOOST_CHECK_EQUAL(4, w[0][1].item<double>());
+
+        x = torch::zeros({batch_size, z_dim});
+        y = torch::exp(x);
+        BOOST_CHECK_EQUAL(x.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
     }
 }
 

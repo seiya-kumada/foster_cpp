@@ -20,7 +20,7 @@ public:
     VariationalAutoEncoderImpl(const VariationalAutoEncoderImpl&) = delete;
     VariationalAutoEncoderImpl& operator=(const VariationalAutoEncoderImpl&) = delete;
 
-    torch::Tensor forward(torch::Tensor x);
+    auto forward(torch::Tensor x) -> std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>;
     torch::nn::Sequential& get_encoder();
     torch::nn::Sequential& get_decoder();
     torch::nn::Linear& get_mu_linear();
