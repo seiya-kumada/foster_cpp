@@ -16,6 +16,7 @@ VariationalAutoEncoderImpl::VariationalAutoEncoderImpl(
     const std::vector<int>& decoder_conv_kernel_sizes,
     const std::vector<int>& decoder_conv_strides,
     int                     z_dim,
+    const torch::Device&    device,
     bool                    uses_batch_norm,
     bool                    uses_dropout
 )
@@ -26,6 +27,7 @@ VariationalAutoEncoderImpl::VariationalAutoEncoderImpl(
     , decoder_conv_kernel_sizes_{decoder_conv_kernel_sizes}
     , decoder_conv_strides_{decoder_conv_strides}
     , z_dim_{z_dim}
+    , device_{device}
     , uses_batch_norm_{uses_batch_norm}
     , uses_dropout_{uses_dropout} 
     , n_layers_encoder_{encoder_conv_filters.size()}
@@ -35,7 +37,7 @@ VariationalAutoEncoderImpl::VariationalAutoEncoderImpl(
     , mu_linear_{register_module("mu_linear", torch::nn::Linear{FLATTEN_SIZE, z_dim})}
     , log_var_linear_{register_module("log_var_linear", torch::nn::Linear{FLATTEN_SIZE, z_dim})}
 {
-    build();
+    build(device);
 }
 
 torch::nn::Sequential& VariationalAutoEncoderImpl::get_encoder()
@@ -58,33 +60,43 @@ torch::nn::Linear& VariationalAutoEncoderImpl::get_log_var_linear()
     return log_var_linear_;
 }
 
-void VariationalAutoEncoderImpl::build()
+void VariationalAutoEncoderImpl::build(const torch::Device& device)
 {
-    encoder_ = build_encoder();
-    decoder_ = build_decoder();
+    encoder_ = build_encoder(device);
+    decoder_ = build_decoder(device);
 }
 
 namespace
 {
-    inline torch::Tensor sample(torch::Tensor mu, torch::Tensor log_var, int z_dim)
+    inline torch::Tensor sample(torch::Tensor mu, torch::Tensor log_var, int z_dim, const torch::Device& device)
     {
         // 2-dim standard normal distribution
-        const auto epsilon = torch::empty(z_dim).normal_();
+        const auto epsilon = torch::empty(z_dim).normal_().to(device);
         return mu + torch::exp(log_var / 2) * epsilon;
     }
 }
 
-auto VariationalAutoEncoderImpl::forward(torch::Tensor x) -> std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+auto VariationalAutoEncoderImpl::predict(torch::Tensor x)
+    -> std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
 {
     x = encoder_->forward(x);
     const auto mu = mu_linear_->forward(x);
     const auto log_var = log_var_linear_->forward(x);
-    x = sample(mu, log_var, z_dim_);
-    x = decoder_->forward(x);
+    x = sample(mu, log_var, z_dim_, device_);
     return std::make_tuple(x, mu, log_var);
+
 }
 
-torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder()
+auto VariationalAutoEncoderImpl::forward(torch::Tensor x) 
+    -> std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+{
+    auto out = predict(x);
+    x = decoder_->forward(std::get<0>(out));
+    std::get<0>(out) = x;
+    return out; 
+}
+
+torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder(const torch::Device& device)
 {
     torch::nn::Sequential encoder {};
     int in_channels = ENCODER_START_CHANNELS;
@@ -122,6 +134,7 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder()
     encoder->push_back(
         torch::nn::Functional(torch::flatten, 1, -1)
     );
+    encoder->to(device);
     return encoder;
 }
 
@@ -134,7 +147,7 @@ namespace
     }
 }
 
-torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder()
+torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder(const torch::Device& device)
 {
     // (batch_size, z_dim)
     torch::nn::Sequential decoder {};
@@ -189,7 +202,7 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder()
         }
         in_channels = out_channels;
     }
-
+    decoder->to(device);
     return decoder;
 }
 
@@ -228,6 +241,8 @@ namespace
         std::vector<int> decoder_conv_kernel_sizes  { 3,  3,  3,  3};
         std::vector<int> decoder_conv_strides       { 1,  2,  2,  1};
         int z_dim {2};
+        torch::Device device{torch::kCPU};
+
 
         VariationalAutoEncoder vae {  
             std::move(encoder_conv_filters),
@@ -236,7 +251,8 @@ namespace
             std::move(decoder_conv_filters),
             std::move(decoder_conv_kernel_sizes),
             std::move(decoder_conv_strides),
-            z_dim 
+            z_dim,
+            device
         };
 
         int batch_size {2};

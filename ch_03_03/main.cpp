@@ -25,12 +25,12 @@ namespace
     constexpr int64_t TRAIN_BATCH_SIZE  {32};
     constexpr int64_t TEST_BATCH_SIZE   {32};
     constexpr double  LEARNING_RATE     {0.0005};
-    constexpr int64_t EPOCHS            {20};
+    constexpr int64_t EPOCHS            {3};
     constexpr int LOG_INTERVAL          {10};
     constexpr double R_LOSS_FACTOR      {1000};
     const std::string OUTPUT_DIR_PATH   {"/home/ubuntu/data/foster/ch03_03/"};
 
-    VariationalAutoEncoder make_model()
+    VariationalAutoEncoder make_model(const torch::Device& device)
     {
         std::vector<int> encoder_conv_filters       {32, 64, 64,  64};
         std::vector<int> encoder_conv_kernel_sizes  { 3,  3,  3,  3};
@@ -47,13 +47,15 @@ namespace
             std::move(decoder_conv_filters),
             std::move(decoder_conv_kernel_sizes),
             std::move(decoder_conv_strides),
-            z_dim 
+            z_dim,
+            device
         };
     }
 
     auto calculate_kl_divergence(const torch::Tensor& mu, const torch::Tensor& log_var)
     {
-        return -0.5 * (1 + log_var - mu * mu - torch::exp(log_var)).sum({1});    
+        //return -0.5 * (1 + log_var - mu * mu - torch::exp(log_var)).sum({1});    
+        return -0.5 * (1 + log_var - mu * mu - torch::exp(log_var)).mean({0, 1});    
     }
 
     auto vae_loss(
@@ -85,10 +87,8 @@ namespace
         {
             auto data = batch.data.to(device);
             optimizer.zero_grad();
-
             std::tie(output, mu, log_var) = model->forward(data);
             auto loss = vae_loss(output, mu, log_var, data); // torch::mse_loss(output, data);
-
             AT_ASSERT(!std::isnan(loss.template item<float>()));
             loss.backward();
             optimizer.step();
@@ -188,7 +188,7 @@ int main(int argc, const char* argv[])
 
     //_/_/_/ Define a model
     
-    auto model = make_model();
+    auto model = make_model(device);
     model->to(device);
 
     //_/_/_/ Load the Data
