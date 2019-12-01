@@ -27,7 +27,7 @@ namespace
     constexpr int64_t TRAIN_BATCH_SIZE  {32};
     constexpr int64_t TEST_BATCH_SIZE   {32};
     constexpr double  LEARNING_RATE     {0.0005};
-    constexpr int64_t EPOCHS            {20};
+    constexpr int64_t EPOCHS            {3};
     constexpr int LOG_INTERVAL          {10};
     const std::string OUTPUT_DIR_PATH {"/home/ubuntu/data/foster/ch03_01/"};
 

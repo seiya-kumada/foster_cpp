@@ -1,16 +1,3 @@
-//#if(UNIT_TEST)
-//#define BOOST_TEST_MAIN
-//#define BOOST_TEST_DYN_LINK
-//
-//#include <boost/test/unit_test.hpp>
-//
-//BOOST_AUTO_TEST_CASE(TEST_main)
-//{
-//    std::cout << "main\n";
-//}
-//
-//#else
-
 #include <torch/torch.h>
 #include <string>
 #include <iostream>
@@ -25,7 +12,7 @@ namespace
     constexpr int64_t TRAIN_BATCH_SIZE  {32};
     constexpr int64_t TEST_BATCH_SIZE   {32};
     constexpr double  LEARNING_RATE     {0.0005};
-    constexpr int64_t EPOCHS            {3};
+    constexpr int64_t EPOCHS            {200};
     constexpr int LOG_INTERVAL          {10};
     constexpr double R_LOSS_FACTOR      {1000};
     const std::string OUTPUT_DIR_PATH   {"/home/ubuntu/data/foster/ch03_03/"};
@@ -54,8 +41,8 @@ namespace
 
     auto calculate_kl_divergence(const torch::Tensor& mu, const torch::Tensor& log_var)
     {
-        //return -0.5 * (1 + log_var - mu * mu - torch::exp(log_var)).sum({1});    
-        return -0.5 * (1 + log_var - mu * mu - torch::exp(log_var)).mean({0, 1});    
+        auto v = -0.5 * (1 + log_var - mu * mu - torch::exp(log_var)).sum({1});    
+        return v.mean();
     }
 
     auto vae_loss(
@@ -63,10 +50,11 @@ namespace
         const torch::Tensor& mu,
         const torch::Tensor& log_var,
         const torch::Tensor& data)
+        -> std::tuple<torch::Tensor, torch::Tensor>
     {
-        auto loss = R_LOSS_FACTOR * torch::mse_loss(output, data);
-        auto kld = calculate_kl_divergence(mu, log_var);  
-        return loss + kld;
+        auto r_loss = R_LOSS_FACTOR * torch::mse_loss(output, data);
+        auto kl_loss = calculate_kl_divergence(mu, log_var);  
+        return std::make_tuple(r_loss, kl_loss);
     }
 
     template<typename DataLoader>
@@ -88,18 +76,24 @@ namespace
             auto data = batch.data.to(device);
             optimizer.zero_grad();
             std::tie(output, mu, log_var) = model->forward(data);
-            auto loss = vae_loss(output, mu, log_var, data); // torch::mse_loss(output, data);
+            auto losses = vae_loss(output, mu, log_var, data);
+            const auto& r_loss = std::get<0>(losses);
+            const auto& kl_loss = std::get<1>(losses);
+            auto loss = r_loss + kl_loss;
+
             AT_ASSERT(!std::isnan(loss.template item<float>()));
             loss.backward();
             optimizer.step();
 
             if (batch_idx % LOG_INTERVAL == 0)
             {
-                std::printf("\rTrain Epoch: %ld [%5ld/%5ld] Loss: %.4f",
+                std::printf("\rTrain Epoch: %ld [%5ld/%5ld] loss: %.4f r_loss: %.4f kl_loss: %.4f ",
                     epoch,
                     batch_idx * batch.data.size(0),
                     dataset_size,
-                    loss.template item<float>());
+                    loss.template item<float>(),
+                    r_loss.template item<float>(),
+                    kl_loss.template item<float>());
             }
             ++batch_idx;
         }
@@ -199,7 +193,6 @@ int main(int argc, const char* argv[])
         .map(torch::data::transforms::Stack<>());
 
     const size_t train_dataset_size = train_dataset.size().value();
-    std::cout << train_dataset_size << std::endl;
 
     auto train_loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(
         std::move(train_dataset), 
@@ -211,7 +204,6 @@ int main(int argc, const char* argv[])
         .map(torch::data::transforms::Stack<>());
 
     const size_t test_dataset_size = test_dataset.size().value();
-    std::cout << test_dataset_size << std::endl;
     
     auto test_loader = torch::data::make_data_loader(std::move(test_dataset), TEST_BATCH_SIZE);
 
