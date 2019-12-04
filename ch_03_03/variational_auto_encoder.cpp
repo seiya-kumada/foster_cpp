@@ -63,15 +63,21 @@ torch::nn::Linear& VariationalAutoEncoderImpl::get_log_var_linear()
 void VariationalAutoEncoderImpl::build(const torch::Device& device)
 {
     encoder_ = build_encoder(device);
+    register_module("encoder", encoder_);
     decoder_ = build_decoder(device);
+    register_module("decoder", decoder_);
 }
 
 namespace
 {
-    inline torch::Tensor sample(torch::Tensor mu, torch::Tensor log_var, int z_dim, const torch::Device& device)
+    inline torch::Tensor sample(
+        torch::Tensor           mu, 
+        torch::Tensor           log_var, 
+        int                     z_dim, 
+        const torch::Device&    device)
     {
         // 2-dim standard normal distribution
-        const auto epsilon = torch::empty(z_dim).normal_().to(device);
+        const auto epsilon = torch::empty(mu.sizes()).normal_().to(device);
         return mu + torch::exp(log_var / 2) * epsilon;
     }
 }
@@ -134,7 +140,8 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder(const torch::Dev
     encoder->push_back(
         torch::nn::Functional(torch::flatten, 1, -1)
     );
-    encoder->to(device);
+
+    //encoder->to(device);
     return encoder;
 }
 
@@ -202,7 +209,7 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder(const torch::Dev
         }
         in_channels = out_channels;
     }
-    decoder->to(device);
+    //decoder->to(device);
     return decoder;
 }
 
@@ -232,6 +239,25 @@ namespace
         std::cout << "> total number of parameters: " << s << std::endl;
     }
 
+    void print_parameters(const VariationalAutoEncoder& model)
+    {
+        int s {0};
+        for (const auto& pair : model->named_parameters())
+        {
+            const auto& key = pair.key();
+            const auto& value = pair.value();
+            //<< ": " << pair.value().sizes() << std::endl;
+            auto c = 1;
+            for (const auto& v : value.sizes())
+            {
+                c *= v; 
+            }
+            std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
+            s += c;
+        }
+        std::cout << "total number of parameters: " << s << std::endl;
+    }
+
     void test_0()
     {
         std::vector<int> encoder_conv_filters       {32, 64, 64,  64};
@@ -255,6 +281,8 @@ namespace
             device
         };
 
+        //print_parameters(vae);
+
         int batch_size {2};
         int cha {1};
         int row {28};
@@ -264,7 +292,10 @@ namespace
         // 7x7x64=3136
         BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, FLATTEN_SIZE})); 
 
+        float a = y[0][0].item<float>();
         auto mu = vae->get_mu_linear()->forward(y);
+        float b = y[0][0].item<float>();
+        BOOST_CHECK_CLOSE(a, b, 1.0e-5);
         BOOST_CHECK_EQUAL(mu.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
         auto log_var = vae->get_log_var_linear()->forward(y);
         BOOST_CHECK_EQUAL(log_var.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
@@ -274,10 +305,10 @@ namespace
         //std::cout << mu << std::endl;
         //std::cout << log_var << std::endl;
         
-        auto z = sample(mu, log_var, z_dim);
+        auto z = sample(mu, log_var, z_dim, device);
         BOOST_CHECK_EQUAL(z.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
         
-        z = sample(mu, log_var, z_dim);
+        z = sample(mu, log_var, z_dim, device);
         BOOST_CHECK_EQUAL(z.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
         
         x = torch::zeros({batch_size, FLATTEN_SIZE});
@@ -289,6 +320,9 @@ namespace
         x = torch::zeros({batch_size, cha, row, col});
         std::tie(y, dummy1, dummy2) = vae->forward(x);
         BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, cha, row, col})); 
+        auto u = torch::mse_loss(y, x);
+        BOOST_CHECK_EQUAL(u.sizes(), (std::vector<int64_t>{})); 
+
 
         x = 2 * torch::ones({batch_size, z_dim});
         auto w = x.sum({1});
@@ -303,6 +337,22 @@ namespace
         y = torch::exp(x);
         BOOST_CHECK_EQUAL(x.sizes(), (std::vector<int64_t>{batch_size, z_dim})); 
     }
+
+    torch::Tensor func()
+    {
+        auto a = torch::ones({3});
+        return a;
+    }
+
+    void test_1()
+    {
+        auto a = func();
+        BOOST_CHECK_EQUAL(1, a[0].item<float>());
+        BOOST_CHECK_EQUAL(1, a[1].item<float>());
+        BOOST_CHECK_EQUAL(1, a[2].item<float>());
+        const auto e = torch::empty({3, 2});
+        BOOST_CHECK_EQUAL(e.sizes(), (std::vector<int64_t>{3, 2}));
+    }
 }
 
 
@@ -310,6 +360,7 @@ BOOST_AUTO_TEST_CASE(TEST_VariationalAutoEncoder)
 {
     std::cout << "VariationalAutoEncoder\n";
     test_0();
+    test_1();
 }
 
 #endif // UNIT_TEST_VariationalAutoEncoder

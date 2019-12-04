@@ -12,9 +12,9 @@ namespace
     constexpr int64_t TRAIN_BATCH_SIZE  {32};
     constexpr int64_t TEST_BATCH_SIZE   {32};
     constexpr double  LEARNING_RATE     {0.0005};
-    constexpr int64_t EPOCHS            {200};
-    constexpr int LOG_INTERVAL          {10};
-    constexpr double R_LOSS_FACTOR      {1000};
+    constexpr int64_t EPOCHS            {10};
+    constexpr int     LOG_INTERVAL      {10};
+    constexpr double  R_LOSS_FACTOR     {1000};
     const std::string OUTPUT_DIR_PATH   {"/home/ubuntu/data/foster/ch03_03/"};
 
     VariationalAutoEncoder make_model(const torch::Device& device)
@@ -147,10 +147,25 @@ namespace
         torch::Tensor mu = torch::zeros({batch_size, z_dim});
         torch::Tensor log_var = torch::zeros({batch_size, z_dim});
         auto kld = calculate_kl_divergence(mu, log_var);
-        BOOST_CHECK_EQUAL(kld.sizes(), std::vector<int64_t>{batch_size});
-        BOOST_CHECK_EQUAL(kld[0].item<double>(), 0);
-        BOOST_CHECK_EQUAL(kld[1].item<double>(), 0);
-        BOOST_CHECK_EQUAL(kld[2].item<double>(), 0);
+        BOOST_CHECK_EQUAL(kld.sizes(), std::vector<int64_t>{});
+        BOOST_CHECK_EQUAL(kld.item<double>(), 0);
+
+        mu = torch::ones({batch_size, z_dim});
+        mu[0][0] = 2;
+        mu[0][1] = 2;
+        mu[1][0] = 3;
+        mu[1][1] = 3;
+        auto v = mu * mu;
+        BOOST_CHECK_EQUAL(v[0][0].item<float>(), 4);
+        BOOST_CHECK_EQUAL(v[0][1].item<float>(), 4);
+        BOOST_CHECK_EQUAL(v[1][0].item<float>(), 9);
+        BOOST_CHECK_EQUAL(v[1][1].item<float>(), 9);
+        BOOST_CHECK_EQUAL(v[2][0].item<float>(), 1);
+        BOOST_CHECK_EQUAL(v[2][1].item<float>(), 1);
+        auto u = v.sum({1});
+        BOOST_CHECK_EQUAL(u[0].item<float>(), 8);
+        BOOST_CHECK_EQUAL(u[1].item<float>(), 18);
+        BOOST_CHECK_EQUAL(u[2].item<float>(), 2);
     }
 }
 
