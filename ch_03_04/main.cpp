@@ -252,10 +252,10 @@ namespace
     {
         //_/_/_/ Generate 2-dim coordinates 
 
-        auto max_x = 4.6541;
-        auto min_x = -5.7535;
-        auto max_y = 5.05247;
-        auto min_y = -4.38811;    
+        auto max_x = 4;
+        auto min_x = -4;
+        auto max_y = 4;
+        auto min_y = -4;    
 
         const auto xs = generate_range(20, min_x, max_x);
         const auto ys = generate_range(20, min_y, max_y);
@@ -307,8 +307,8 @@ int main(int argc, const char* argv[])
 
     //_/_/_/ 
 
-    //generate_new_arts_on_grid(device, model);
-    make_distribution_in_latent_space(device, test_dataset, model, TEST_BATCH_SIZE);
+    generate_new_arts_on_grid(device, model);
+    //make_distribution_in_latent_space(device, test_dataset, model, TEST_BATCH_SIZE);
  
     return 0;
 }

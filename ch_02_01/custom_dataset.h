@@ -3,7 +3,7 @@
 #include <torch/torch.h>
 #include <vector>
 #include <fstream>
-//TODO: なぜclone()するのか？
+
 class CustomDataset : public torch::data::Dataset<CustomDataset> {
 private:
 	// Declare 2 vectors of tensors for images and labels

@@ -344,6 +344,16 @@ namespace
         return a;
     }
 
+    struct TensorTest
+    {
+        TensorTest()
+            : tensor_{torch::ones({3})} {}
+
+        torch::Tensor tensor_;
+
+        torch::Tensor get() { return tensor_; }
+    };
+
     void test_1()
     {
         auto a = func();
@@ -352,6 +362,12 @@ namespace
         BOOST_CHECK_EQUAL(1, a[2].item<float>());
         const auto e = torch::empty({3, 2});
         BOOST_CHECK_EQUAL(e.sizes(), (std::vector<int64_t>{3, 2}));
+
+        TensorTest test{};
+        auto t = test.get();
+        t[0] = 4; 
+        auto s = test.get();
+        BOOST_CHECK_EQUAL(4, s[0].item<float>());
     }
 }
 

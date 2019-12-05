@@ -6,7 +6,7 @@
         --resume false \
         --model_path /home/ubuntu/data/foster/ch02_01/model_e10.pt \
         --opt_path /home/ubuntu/data/foster/ch02_01/opt_e10.pt \
-        --verbose false \
+        --verbose true \
         --trained_model_path /home/ubuntu/data/foster/ch02_01/model_e10.pt \
         --trained_opt_path /home/ubuntu/data/foster/ch02_01/opt_e10.pt \
 
