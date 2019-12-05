@@ -140,6 +140,10 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder(const torch::Dev
     encoder->push_back(
         torch::nn::Functional(torch::flatten, 1, -1)
     );
+    // https://discuss.pytorch.org/t/error-while-using-functional-module-in-pytorch-c/51816 
+    //encoder->push_back(
+    //    torch::nn::Functional(static_cast<torch::Tensor(*)(const torch::Tensor&, int64_t, int64_t)>(torch::flatten), 1, -1)
+    //);
 
     //encoder->to(device);
     return encoder;

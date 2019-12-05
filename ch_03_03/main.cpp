@@ -12,7 +12,7 @@ namespace
     constexpr int64_t TRAIN_BATCH_SIZE  {32};
     constexpr int64_t TEST_BATCH_SIZE   {32};
     constexpr double  LEARNING_RATE     {0.0005};
-    constexpr int64_t EPOCHS            {100};
+    constexpr int64_t EPOCHS            {3};
     constexpr int     LOG_INTERVAL      {10};
     constexpr double  R_LOSS_FACTOR     {1000};
     const std::string OUTPUT_DIR_PATH   {"/home/ubuntu/data/foster/ch03_03/"};
@@ -209,9 +209,9 @@ int main(int argc, const char* argv[])
 
     const size_t train_dataset_size = train_dataset.size().value();
 
-    auto train_loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(
-        std::move(train_dataset), 
-        TRAIN_BATCH_SIZE);
+    const auto train_loader = torch::data::make_data_loader(
+        std::move(train_dataset),
+        torch::data::DataLoaderOptions().batch_size(TRAIN_BATCH_SIZE).workers(2));
 
     auto test_dataset = torch::data::datasets::MNIST(
         DATA_DIR_PATH, 
@@ -220,7 +220,9 @@ int main(int argc, const char* argv[])
 
     const size_t test_dataset_size = test_dataset.size().value();
     
-    auto test_loader = torch::data::make_data_loader(std::move(test_dataset), TEST_BATCH_SIZE);
+    const auto test_loader = torch::data::make_data_loader(
+        std::move(test_dataset),
+        torch::data::DataLoaderOptions().batch_size(TEST_BATCH_SIZE).workers(2));
 
     //_/_/_/ Configure a optimizer
     
