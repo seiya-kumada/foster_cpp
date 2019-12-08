@@ -6,6 +6,8 @@ class VariationalAutoEncoderImpl : public torch::nn::Module
 {
 public:
     VariationalAutoEncoderImpl(
+        int                     encoder_start_channels,
+        const std::vector<int64_t>& before_flatten_size,
         const std::vector<int>& encoder_conv_filters,
         const std::vector<int>& encoder_conv_kernel_sizes,
         const std::vector<int>& encoder_conv_strides,
@@ -29,6 +31,9 @@ public:
     torch::nn::Linear& get_log_var_linear();
 
 private:
+    int                 encoder_start_channels_;
+    std::vector<int64_t>    before_flatten_size_;
+    int64_t             flatten_size_;
     std::vector<int>    encoder_conv_filters_;
     std::vector<int>    encoder_conv_kernel_sizes_;
     std::vector<int>    encoder_conv_strides_;

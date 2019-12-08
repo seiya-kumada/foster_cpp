@@ -258,11 +258,11 @@ int main(int argc, const char* argv[])
     const size_t test_dataset_size = test_dataset.size().value();
    
     // memo: where is the shuffle executed?
-    const auto train_loader = torch::data::make_data_loader(
+    const auto train_loader = torch::data::make_data_loader<torch::data::samplers::RandomSampler>(
             std::move(train_dataset),
             torch::data::DataLoaderOptions().batch_size(batch_size).workers(2));
 
-    const auto test_loader = torch::data::make_data_loader(
+    const auto test_loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(
             std::move(test_dataset),
             torch::data::DataLoaderOptions().batch_size(batch_size).workers(2));
     

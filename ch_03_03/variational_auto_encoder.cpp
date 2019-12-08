@@ -2,13 +2,19 @@
 
 namespace
 {
-    constexpr int ENCODER_START_CHANNELS    {1};
-    constexpr int DECODER_START_CHANNELS    {64};
-    constexpr int FLATTEN_SIZE              {3136};
-    const std::vector<int64_t> BEFORE_FLATTEN_SIZE  {64, 7, 7};
+    inline int64_t prod(const std::vector<int64_t>& s)
+    {
+        return std::accumulate(
+            std::begin(s), 
+            std::end(s), 
+            1, [
+            ](int64_t init, int64_t v){ return init * v; });
+    }
 }
 
 VariationalAutoEncoderImpl::VariationalAutoEncoderImpl(
+     int                    encoder_start_channels,
+    const std::vector<int64_t>& before_flatten_size,
     const std::vector<int>& encoder_conv_filters,
     const std::vector<int>& encoder_conv_kernel_sizes,
     const std::vector<int>& encoder_conv_strides,
@@ -20,7 +26,10 @@ VariationalAutoEncoderImpl::VariationalAutoEncoderImpl(
     bool                    uses_batch_norm,
     bool                    uses_dropout
 )
-    : encoder_conv_filters_{encoder_conv_filters}
+    : encoder_start_channels_{encoder_start_channels}
+    , before_flatten_size_{before_flatten_size}
+    , flatten_size_{prod(before_flatten_size)}
+    , encoder_conv_filters_{encoder_conv_filters}
     , encoder_conv_kernel_sizes_{encoder_conv_kernel_sizes}
     , encoder_conv_strides_{encoder_conv_strides}
     , decoder_conv_filters_{decoder_conv_filters}
@@ -34,8 +43,8 @@ VariationalAutoEncoderImpl::VariationalAutoEncoderImpl(
     , n_layers_decoder_{decoder_conv_filters.size()}
     , encoder_{nullptr}
     , decoder_{nullptr}
-    , mu_linear_{register_module("mu_linear", torch::nn::Linear{FLATTEN_SIZE, z_dim})}
-    , log_var_linear_{register_module("log_var_linear", torch::nn::Linear{FLATTEN_SIZE, z_dim})}
+    , mu_linear_{register_module("mu_linear", torch::nn::Linear{flatten_size_, z_dim})}
+    , log_var_linear_{register_module("log_var_linear", torch::nn::Linear{flatten_size_, z_dim})}
 {
     build(device);
 }
@@ -105,7 +114,7 @@ auto VariationalAutoEncoderImpl::forward(torch::Tensor x)
 torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder(const torch::Device& device)
 {
     torch::nn::Sequential encoder {};
-    int in_channels = ENCODER_START_CHANNELS;
+    int in_channels = encoder_start_channels_;
     for (auto i = 0; i < n_layers_encoder_; ++i)
     {
         auto out_channels = encoder_conv_filters_[i];
@@ -140,12 +149,6 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder(const torch::Dev
     encoder->push_back(
         torch::nn::Functional(torch::flatten, 1, -1)
     );
-    // https://discuss.pytorch.org/t/error-while-using-functional-module-in-pytorch-c/51816 
-    //encoder->push_back(
-    //    torch::nn::Functional(static_cast<torch::Tensor(*)(const torch::Tensor&, int64_t, int64_t)>(torch::flatten), 1, -1)
-    //);
-
-    //encoder->to(device);
     return encoder;
 }
 
@@ -164,14 +167,14 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder(const torch::Dev
     torch::nn::Sequential decoder {};
 
     decoder->push_back(
-        torch::nn::Linear(z_dim_, FLATTEN_SIZE)
+        torch::nn::Linear(z_dim_, flatten_size_)
     );
    
     decoder->push_back(
-        torch::nn::Functional(reshape, BEFORE_FLATTEN_SIZE)
+        torch::nn::Functional(reshape, before_flatten_size_)
     );
 
-    int in_channels = DECODER_START_CHANNELS;
+    int in_channels = encoder_conv_filters_.back();
     for (auto i = 0; i < n_layers_decoder_; ++i)
     {
         auto out_channels = decoder_conv_filters_[i];
@@ -213,7 +216,6 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder(const torch::Dev
         }
         in_channels = out_channels;
     }
-    //decoder->to(device);
     return decoder;
 }
 
@@ -223,6 +225,10 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder(const torch::Dev
 
 namespace
 {
+
+    const std::vector<int64_t> BEFORE_FLATTEN_SIZE  {64, 7, 7};
+    constexpr int FLATTEN_SIZE = 64 * 49;
+    
     template<typename M>
     void print_parameters(const M& model) //VariationalAutoEncoder& model)
     {
@@ -264,6 +270,8 @@ namespace
 
     void test_0()
     {
+        int              encoder_start_channles     {1};
+        std::vector<int64_t> before_flatten_size    {64, 7, 7};
         std::vector<int> encoder_conv_filters       {32, 64, 64,  64};
         std::vector<int> encoder_conv_kernel_sizes  { 3,  3,  3,  3};
         std::vector<int> encoder_conv_strides       { 1,  2,  2,  1};
@@ -275,6 +283,8 @@ namespace
 
 
         VariationalAutoEncoder vae {  
+            encoder_start_channles,
+            before_flatten_size,
             std::move(encoder_conv_filters),
             std::move(encoder_conv_kernel_sizes),
             std::move(encoder_conv_strides),
