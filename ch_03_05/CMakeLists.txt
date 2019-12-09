@@ -3,6 +3,7 @@ set(PROJ_NAME ch_03_05)
 add_executable(${PROJ_NAME} 
     ./main.cpp
     ./custom_dataset.cpp
+    ./convert_to_tensor.cpp
     ../ch_03_03/variational_auto_encoder.cpp
     )
 
@@ -15,6 +16,7 @@ target_compile_definitions(
     UNIT_TEST=1
     UNIT_TEST_VariationalAutoEncoder=1
     UNIT_TEST_CustomDataset=1
+    UNIT_TEST_convert_to_tensor=1
 )
 
 set(INCLUDE_DIRS

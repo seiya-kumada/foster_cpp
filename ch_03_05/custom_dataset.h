@@ -3,6 +3,7 @@
 #include <torch/torch.h>
 #include <vector>
 #include <boost/filesystem.hpp>
+#include <opencv2/core.hpp>
 #include <string>
 
 class CustomDataset : public torch::data::Dataset<CustomDataset> {
@@ -14,7 +15,7 @@ private:
  * 3. batch_size_分だけ画像を読み込む。
  */
 public:
-    CustomDataset(const std::string& dir_path);
+    CustomDataset(const std::string& dir_path, const std::vector<int>& input_size);
 	
     // Override get() function to return tensor at location index
 	torch::data::Example<> get(std::size_t index) override;
@@ -30,5 +31,7 @@ public:
         return paths_;
     }
 
+private:
+    cv::Size input_size_;
 };
 #endif // CUSTOM_DATASET

@@ -1,5 +1,6 @@
 #include "custom_dataset.h"
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 namespace fs = boost::filesystem;
 
@@ -26,7 +27,8 @@ namespace
     }
 }
 
-CustomDataset::CustomDataset(const std::string& dir_path)
+CustomDataset::CustomDataset(const std::string& dir_path, const std::vector<int>& input_size)
+    : input_size_{input_size[0], input_size[1]}
 {
     load_paths(dir_path, paths_); 
 }
@@ -34,6 +36,7 @@ CustomDataset::CustomDataset(const std::string& dir_path)
 torch::data::Example<> CustomDataset::get(std::size_t index)
 {
     auto image = cv::imread(paths_[index].string());
+    cv::resize(image, image, input_size_, cv::INTER_LINEAR);
     return {convert_to_tensor(image), torch::empty({})};
 };
 
@@ -44,7 +47,7 @@ namespace
 {
     void test_0()
     {
-        CustomDataset dataset {"/home/ubuntu/data/celeba/img_align_celeba"};
+        CustomDataset dataset {"/home/ubuntu/data/celeba/img_align_celeba", {128, 128}};
         const auto& paths = dataset.get_paths();
         BOOST_CHECK_EQUAL(202599, paths.size());
         if (dataset.size())
@@ -54,8 +57,8 @@ namespace
         }
         auto e = dataset.get(0);
         auto data = e.data;
-        BOOST_CHECK_EQUAL(data.sizes(), (std::vector<std::int64_t>{3, 218, 178}));
-        BOOST_CHECK_EQUAL(189, data[0][0][0].item<float>());
+        BOOST_CHECK_EQUAL(data.sizes(), (std::vector<std::int64_t>{3, 128, 128}));
+        BOOST_CHECK_EQUAL(192, data[0][0][0].item<float>());
     }
 }
 

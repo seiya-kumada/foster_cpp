@@ -107,12 +107,42 @@ namespace
 #if(UNIT_TEST)
 #define BOOST_TEST_MAIN
 #define BOOST_TEST_DYN_LINK
-
 #include <boost/test/unit_test.hpp>
+namespace
+{
+    void print_parameters(const VariationalAutoEncoder& model)
+    {
+        int s {0};
+        for (const auto& pair : model->named_parameters())
+        {
+            const auto& key = pair.key();
+            const auto& value = pair.value();
+            //<< ": " << pair.value().sizes() << std::endl;
+            auto c = 1;
+            for (const auto& v : value.sizes())
+            {
+                c *= v; 
+            }
+            std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
+            s += c;
+        }
+        std::cout << "total number of parameters: " << s << std::endl;
+    }
+
+    void test0()
+    {
+        torch::Device device{torch::kCPU};
+        auto model = make_model(device);
+        //print_parameters(model);
+        auto x = torch::ones({3, 218, 178});
+        //auto y = model->forward(x);
+    }
+}
 
 BOOST_AUTO_TEST_CASE(TEST_main)
 {
     std::cout << "main\n";
+    test0();
 }
 
 #else
@@ -141,8 +171,9 @@ int main(int argc, const char* argv[])
     model->to(device);
 
     //_/_/_/ Load the Data
-    
-    auto train_dataset = CustomDataset{DATA_DIR_PATH}
+
+    std::vector<int> input_size {128, 128};    
+    auto train_dataset = CustomDataset{DATA_DIR_PATH, input_size}
         .map(torch::data::transforms::Normalize<>(0, 255.0))
         .map(torch::data::transforms::Stack<>());
 
