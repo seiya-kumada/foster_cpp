@@ -38,6 +38,10 @@ torch::data::Example<> CustomDataset::get(std::size_t index)
     auto image = cv::imread(paths_[index].string());
     cv::resize(image, image, input_size_, cv::INTER_LINEAR);
     return {convert_to_tensor(image), torch::empty({})};
+
+    //torch::Tensor tensor {};
+    //torch::load(tensor, paths_[index].string());
+    //return {tensor, torch::empty({})};
 };
 
 #if(UNIT_TEST_CustomDataset)
@@ -47,7 +51,8 @@ namespace
 {
     void test_0()
     {
-        CustomDataset dataset {"/home/ubuntu/data/celeba/img_align_celeba", {128, 128}};
+        std::vector<int> input_size {128, 128};
+        CustomDataset dataset {"/home/ubuntu/data/celeba/img_align_celeba", input_size};
         const auto& paths = dataset.get_paths();
         BOOST_CHECK_EQUAL(202599, paths.size());
         if (dataset.size())

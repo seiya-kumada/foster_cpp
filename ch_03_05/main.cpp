@@ -171,8 +171,7 @@ int main(int argc, const char* argv[])
     model->to(device);
 
     //_/_/_/ Load the Data
-
-    std::vector<int> input_size {128, 128};    
+    std::vector<int> input_size {128, 128};
     auto train_dataset = CustomDataset{DATA_DIR_PATH, input_size}
         .map(torch::data::transforms::Normalize<>(0, 255.0))
         .map(torch::data::transforms::Stack<>());

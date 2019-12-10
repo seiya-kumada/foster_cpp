@@ -47,7 +47,9 @@ namespace
 {
     void test0()
     {
-        convert_to_tensor("/home/ubuntu/data/celeba/img_align_celeba", "/home/ubuntu/data/celeba/img_align_celeba_tensor");
+        //convert_to_tensor(
+        //    "/home/ubuntu/data/celeba/img_align_celeba", 
+        //    "/home/ubuntu/data/celeba/img_align_celeba_tensor");
         //torch::Tensor tensor {};
         //torch::load(tensor, "/home/ubuntu/data/celeba/img_align_celeba_tensor/048255.pt");
         //std::cout << tensor.sizes() << std::endl;
