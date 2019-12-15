@@ -9,8 +9,8 @@ namespace
     const std::string DATA_DIR_PATH     {"/home/ubuntu/data/celeba/img_align_celeba"};
     constexpr int64_t TRAIN_BATCH_SIZE  {32};
     constexpr double  LEARNING_RATE     {0.0005};
-    constexpr int64_t EPOCHS            {1};
-    constexpr int     LOG_INTERVAL      {10};
+    constexpr int64_t EPOCHS            {10};
+    constexpr int     LOG_INTERVAL      {100};
     constexpr double  R_LOSS_FACTOR     {10000};
     const std::string OUTPUT_DIR_PATH   {"/home/ubuntu/data/foster/ch03_05/"};
 

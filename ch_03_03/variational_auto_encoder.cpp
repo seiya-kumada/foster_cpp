@@ -1,4 +1,5 @@
 #include "variational_auto_encoder.h"
+#include <iostream>
 
 namespace
 {

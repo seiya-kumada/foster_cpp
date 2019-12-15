@@ -65,12 +65,37 @@ namespace
         BOOST_CHECK_EQUAL(data.sizes(), (std::vector<std::int64_t>{3, 128, 128}));
         BOOST_CHECK_EQUAL(192, data[0][0][0].item<float>());
     }
+
+    void test_1()
+    {
+        std::vector<int> input_size {128, 128};
+        auto dataset = CustomDataset{"/home/ubuntu/data/celeba/img_align_celeba", input_size}
+            .map(torch::data::transforms::Normalize<>(0, 255.0))
+            .map(torch::data::transforms::Stack<>());
+
+        auto loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(
+            std::move(dataset),
+            torch::data::DataLoaderOptions().batch_size(2).workers(2));
+    
+        for (auto& batch : *loader)
+        {
+            auto data = batch.data;
+            auto a = data[0][0][0][0].item<float>();
+            auto b = data[0][1][0][0].item<float>();
+            auto c = data[0][2][0][0].item<float>();
+            BOOST_CHECK(0 <= a && a <= 1);
+            BOOST_CHECK(0 <= b && b <= 1);
+            BOOST_CHECK(0 <= c && c <= 1);
+            break;
+        }
+    }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_CustomDataset)
 {
     std::cout << "CustomDataset\n";
     test_0();
+    test_1();
 }
 
 #endif // UNIT_TEST_CustomDataset
