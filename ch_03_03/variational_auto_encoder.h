@@ -52,9 +52,9 @@ private:
     torch::nn::Linear       mu_linear_;
     torch::nn::Linear       log_var_linear_;
 
-    void build(const torch::Device& device);
-    torch::nn::Sequential build_encoder(const torch::Device& device);
-    torch::nn::Sequential build_decoder(const torch::Device& device);
+    void build();
+    torch::nn::Sequential build_encoder();
+    torch::nn::Sequential build_decoder();
 };
 
 TORCH_MODULE(VariationalAutoEncoder);

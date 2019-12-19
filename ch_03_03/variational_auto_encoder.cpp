@@ -47,7 +47,7 @@ VariationalAutoEncoderImpl::VariationalAutoEncoderImpl(
     , mu_linear_{register_module("mu_linear", torch::nn::Linear{flatten_size_, z_dim})}
     , log_var_linear_{register_module("log_var_linear", torch::nn::Linear{flatten_size_, z_dim})}
 {
-    build(device);
+    build();
 }
 
 torch::nn::Sequential& VariationalAutoEncoderImpl::get_encoder()
@@ -70,11 +70,11 @@ torch::nn::Linear& VariationalAutoEncoderImpl::get_log_var_linear()
     return log_var_linear_;
 }
 
-void VariationalAutoEncoderImpl::build(const torch::Device& device)
+void VariationalAutoEncoderImpl::build()
 {
-    encoder_ = build_encoder(device);
+    encoder_ = build_encoder();
     register_module("encoder", encoder_);
-    decoder_ = build_decoder(device);
+    decoder_ = build_decoder();
     register_module("decoder", decoder_);
 }
 
@@ -112,7 +112,7 @@ auto VariationalAutoEncoderImpl::forward(torch::Tensor x)
     return out; 
 }
 
-torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder(const torch::Device& device)
+torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder()
 {
     torch::nn::Sequential encoder {};
     int in_channels = encoder_start_channels_;
@@ -162,7 +162,7 @@ namespace
     }
 }
 
-torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder(const torch::Device& device)
+torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder()
 {
     // (batch_size, z_dim)
     torch::nn::Sequential decoder {};
