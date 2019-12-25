@@ -45,7 +45,7 @@ namespace
 
     auto calculate_kl_divergence(const torch::Tensor& mu, const torch::Tensor& log_var)
     {
-        auto v = -0.5 * (1 + log_var - mu * mu - torch::exp(log_var)).sum({1});    
+        auto v = -0.5 * (1 + log_var - torch::mul(mu, mu) - torch::exp(log_var)).sum({1});    
         return v.mean();
     }
 
@@ -109,7 +109,8 @@ namespace
         VariationalAutoEncoder& model,
         torch::Device           device,
         DataLoader&             data_loader,
-        size_t                  dataset_size)
+        size_t                  dataset_size,
+        const std::string&      phase)
     {
         torch::NoGradGuard no_grad{};
         model->eval();
@@ -132,7 +133,7 @@ namespace
 
         test_loss /= s;
         std::printf(
-            "Test set: Average loss: %.4f\n",
+            "%s set: Average loss: %.4f\n", phase.c_str(),
             test_loss);
     }
 }
@@ -242,7 +243,8 @@ int main(int argc, const char* argv[])
     for (auto epoch = 1; epoch <= EPOCHS; ++epoch)
     {
         train(epoch, model, device, *train_loader, optimizer, train_dataset_size);
-        test(model, device, *test_loader, test_dataset_size);
+        test(model, device, *train_loader, train_dataset_size, "Test");
+        test(model, device, *test_loader, test_dataset_size, "Train");
     }
     const auto end = std::chrono::system_clock::now();
     std::cout << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() 

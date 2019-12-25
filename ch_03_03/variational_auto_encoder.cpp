@@ -47,6 +47,10 @@ VariationalAutoEncoderImpl::VariationalAutoEncoderImpl(
     , mu_linear_{register_module("mu_linear", torch::nn::Linear{flatten_size_, z_dim})}
     , log_var_linear_{register_module("log_var_linear", torch::nn::Linear{flatten_size_, z_dim})}
 {
+    torch::nn::init::xavier_uniform_(mu_linear_->weight);
+    torch::nn::init::zeros_(mu_linear_->bias);
+    torch::nn::init::xavier_uniform_(log_var_linear_->weight);
+    torch::nn::init::zeros_(log_var_linear_->bias);
     build();
 }
 
@@ -119,13 +123,16 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_encoder()
     for (auto i = 0; i < n_layers_encoder_; ++i)
     {
         auto out_channels = encoder_conv_filters_[i];
-        encoder->push_back(
-            torch::nn::Conv2d(
-                torch::nn::Conv2dOptions(in_channels, out_channels, encoder_conv_kernel_sizes_[i])
-                    .stride(encoder_conv_strides_[i])
-                    .padding(1)
-            )
+
+        auto c = torch::nn::Conv2d(
+            torch::nn::Conv2dOptions(in_channels, out_channels, encoder_conv_kernel_sizes_[i])
+                .stride(encoder_conv_strides_[i])
+                .padding(1)
         );
+        torch::nn::init::xavier_uniform_(c->weight);
+        torch::nn::init::zeros_(c->bias);
+        
+        encoder->push_back(std::move(c));
         
         if (uses_batch_norm_)
         {
@@ -167,8 +174,11 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder()
     // (batch_size, z_dim)
     torch::nn::Sequential decoder {};
 
+    auto l = torch::nn::Linear(z_dim_, flatten_size_);
+    torch::nn::init::xavier_uniform_(l->weight);
+    torch::nn::init::zeros_(l->bias);
     decoder->push_back(
-        torch::nn::Linear(z_dim_, flatten_size_)
+        std::move(l)
     );
    
     decoder->push_back(
@@ -179,16 +189,19 @@ torch::nn::Sequential VariationalAutoEncoderImpl::build_decoder()
     for (auto i = 0; i < n_layers_decoder_; ++i)
     {
         auto out_channels = decoder_conv_filters_[i];
-        decoder->push_back(
-            torch::nn::Conv2d(
-                torch::nn::Conv2dOptions(in_channels, out_channels, decoder_conv_kernel_sizes_[i])
-                    .stride(decoder_conv_strides_[i])
-                    .padding(1)
-                    .output_padding(decoder_conv_strides_[i] + 2 * 1 - decoder_conv_kernel_sizes_[i])
-                    .transposed(true)
-            )
+
+        auto c = torch::nn::Conv2d(
+            torch::nn::Conv2dOptions(in_channels, out_channels, decoder_conv_kernel_sizes_[i])
+                .stride(decoder_conv_strides_[i])
+                .padding(1)
+                .output_padding(decoder_conv_strides_[i] + 2 * 1 - decoder_conv_kernel_sizes_[i])
+                .transposed(true)
         );
+        torch::nn::init::xavier_uniform_(c->weight);
+        torch::nn::init::zeros_(c->bias);
         
+        decoder->push_back(std::move(c));
+       
         if (i < n_layers_decoder_ - 1)
         {
             if (uses_batch_norm_)
@@ -296,7 +309,7 @@ namespace
             device
         };
 
-        //print_parameters(vae);
+        print_parameters(vae);
 
         int batch_size {2};
         int cha {1};

@@ -102,6 +102,39 @@ namespace
         }
         std::cout << std::endl;
     }
+
+    template<typename DataLoader>
+    void test(
+        VariationalAutoEncoder& model,
+        torch::Device           device,
+        DataLoader&             data_loader,
+        size_t                  dataset_size,
+        const std::string&      phase)
+    {
+        torch::NoGradGuard no_grad{};
+        model->eval();
+        double test_loss {0};
+        torch::Tensor output {};
+        torch::Tensor mu {};
+        torch::Tensor log_var {};
+        int s = 0; 
+        for (const auto& batch : data_loader)
+        {
+            auto data = batch.data.to(device);
+            std::tie(output, mu, log_var) = model->forward(data);
+            const auto losses = vae_loss(output, mu, log_var, data);
+            const auto& r_loss = std::get<0>(losses);
+            const auto& kl_loss = std::get<1>(losses);
+            auto loss = r_loss + kl_loss;
+            test_loss += loss.template item<float>();
+            s += 1;
+        }
+
+        test_loss /= s;
+        std::printf(
+            "%s set: Average loss: %.4f\n", phase.c_str(),
+            test_loss);
+    }
 }
 
 #if(UNIT_TEST)
@@ -195,6 +228,7 @@ int main(int argc, const char* argv[])
     for (auto epoch = 1; epoch <= EPOCHS; ++epoch)
     {
         train(epoch, model, device, *train_loader, optimizer, train_dataset_size);
+        test(model, device, *train_loader, train_dataset_size, "Test");
     }
     const auto end = std::chrono::system_clock::now();
     std::cout << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() 
