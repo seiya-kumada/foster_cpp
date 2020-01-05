@@ -68,22 +68,18 @@ namespace
         auto dir_path = fs::path(OUTPUT_DIR_PATH) / subdir_name;
         auto batch_size = static_cast<int>(z_points.size(0));
         auto dim = static_cast<int>(z_points.size(1));
+        auto points = z_points.to("cpu");
         for (auto i = 0; i < batch_size; ++i)
         {
-            const auto& z_point = z_points[i];
-            // std::cout << z_point.sizes() << std::endl;   
-            auto data = z_point.to("cpu").data<float>();
+            const auto& point = points[i];
+            const auto data = point.data<float>();
             auto path = dir_path / (boost::format("%02d_%02d.bin") % c % i).str();
             std::ofstream ofs {path.string(), std::ios::out | std::ios::binary};
-            // std::cout << sizeof(data[0]) << std::endl;
-            // std::cout << c << " " << i << std::endl;
+            std::cout << path << std::endl;
+            std::cout << data[0] << std::endl;
             ofs.write(reinterpret_cast<char*>(data), sizeof(data[0]) * dim);     
             ofs.close();
         }
-
-        // cv::Mat m {batch_size, dim, CV_32FC1, z_points.data<float>()};
-        // std::cout << path << std::endl;
-        // cv::imwrite(path.string(), m);
     }
 
     template<typename Dataset>
@@ -100,7 +96,7 @@ namespace
         {
             auto data = batch.data.to(device);
             std::tie(z_points, mu, log_var) = model->predict(data);
-            // std::cout << "z_points: " << z_points.sizes() << std::endl;
+            std::cout << "z_points: " << z_points.sizes() << std::endl; // (10,200)
             auto reconst_images = model->get_decoder()->forward(z_points);
             // std::cout << "reconst: " << reconst_images.sizes() << std::endl;
             save_images(data, "source_images");
@@ -119,7 +115,7 @@ namespace
         torch::Tensor z_points {};
         torch::Tensor mu {};
         torch::Tensor log_var {};
-        auto steps = 5;
+        auto steps = 20;
         auto c = 0;
         for (const auto& batch : *loader)
         {
@@ -132,6 +128,23 @@ namespace
                 break;
             }
         }
+    }
+
+    void make_newly_generated_faces(VariationalAutoEncoder& model, const torch::Device& device)
+    {
+        auto size = std::vector<std::int64_t>{10, 200};
+        const auto znew_0 = torch::empty(size).normal_().to(device);
+        auto reconst_0 = model->get_decoder()->forward(znew_0).to("cpu");
+        
+        const auto znew_1 = torch::empty(size).normal_().to(device);
+        auto reconst_1 = model->get_decoder()->forward(znew_1).to("cpu");
+
+        //const auto znew_2 = torch::empty(size).normal_().to(device);
+        //auto reconst_2 = model->get_decoder()->forward(znew_2).to("cpu");
+        //
+        auto vs = torch::cat({reconst_0, reconst_1}, 0);
+        std::cout << vs.sizes() << std::endl;
+        save_images(vs, "newly_generated_images");
     }
 }
 
@@ -172,11 +185,16 @@ int main(int argc, const char* argv[])
 
     //_/_/_/ Reconstruct faces
    
-    reconstruct_faces(model, dataset, device);
+    //reconstruct_faces(model, dataset, device);
 
     //_/_/_/ Make latent space distribution
 
-    make_latent_space_distibution(model, dataset, device);
+    //make_latent_space_distibution(model, dataset, device);
     
+    //_/_/_/ Make newly generated faces
+    
+    make_newly_generated_faces(model, device);
+    
+
     return 0;
 }
