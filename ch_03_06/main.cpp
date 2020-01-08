@@ -6,6 +6,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <fstream>
+#include "csv.h"
 
 namespace fs = boost::filesystem;
 
@@ -146,7 +147,65 @@ namespace
         std::cout << vs.sizes() << std::endl;
         save_images(vs, "newly_generated_images");
     }
+
+    struct FilenameInfo
+    {
+        std::string image_id_;
+        std::string filename_;
+        FilenameInfo(const std::string& image_id, const std::string& filename)
+            : image_id_{image_id}
+            , filename_{filename} {}
+    };
+
+    std::vector<FilenameInfo> read_names_from_csv(const std::string& csv_path, int batch_size, const std::string& label)
+    {
+        io::CSVReader<2> csv {csv_path};
+        csv.read_header(io::ignore_extra_column, "image_id", label);
+        std::string image_id {};
+        std::string name {};
+        std::vector<FilenameInfo> infos {};
+        int c = 0;
+        while (csv.read_row(image_id, name))
+        {
+            infos.emplace_back(image_id, name);
+            c += 1;
+            if (c == batch_size)
+            {
+                break;
+            }
+        }
+        return infos;
+    }
 }
+
+#if(UNIT_TEST)
+#define BOOST_TEST_MAIN
+#define BOOST_TEST_DYN_LINK
+#include <boost/test/unit_test.hpp>
+
+namespace
+{
+    void test_0()
+    {
+        const std::string path = "/home/ubuntu/data/celeba/list_attr_celeba.csv";
+        int batch_size = 10;
+        auto infos = read_names_from_csv(path, batch_size, "Attractive");
+        BOOST_CHECK_EQUAL(10, infos.size());
+        for (const auto& info: infos)
+        {
+            std::cout << info.filename_ << " " << info.image_id_ << std::endl;
+        }
+        
+    }
+}
+
+BOOST_AUTO_TEST_CASE(TEST_main)
+{
+    std::cout << "main\n";
+    test_0();
+}
+
+#else // UNIT_TEST
 
 int main(int argc, const char* argv[])
 {
@@ -198,3 +257,6 @@ int main(int argc, const char* argv[])
 
     return 0;
 }
+
+
+#endif  // UNIT_TEST

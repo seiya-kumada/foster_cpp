@@ -12,10 +12,7 @@ find_package(Boost REQUIRED COMPONENTS unit_test_framework filesystem program_op
 
 target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
-    UNIT_TEST=0
-    UNIT_TEST_VariationalAutoEncoder=0
-    UNIT_TEST_CustomDataset=0
-    UNIT_TEST_convert_to_tensor=0
+    UNIT_TEST=1
 )
 
 set(INCLUDE_DIRS
