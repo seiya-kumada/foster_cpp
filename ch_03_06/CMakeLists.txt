@@ -3,6 +3,7 @@ set(PROJ_NAME ch_03_06)
 add_executable(${PROJ_NAME} 
     ./main.cpp
     ../ch_03_05/custom_dataset.cpp
+    ./custom_dataset_from_csv.cpp
     ../ch_03_03/variational_auto_encoder.cpp
     )
 
@@ -13,6 +14,7 @@ find_package(Boost REQUIRED COMPONENTS unit_test_framework filesystem program_op
 target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
     UNIT_TEST=1
+    UNIT_TEST_CustomDatasetFromCSV=1
 )
 
 set(INCLUDE_DIRS
