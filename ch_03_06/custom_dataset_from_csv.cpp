@@ -27,6 +27,13 @@ namespace
         tensor = tensor.permute({2, 0, 1});
         return tensor.clone();
     }
+
+    torch::Tensor convert_to_tensor(int label)
+    {   
+        auto tensor = torch::empty(1, torch::kInt64);
+        *reinterpret_cast<int64_t*>(tensor.data_ptr()) = label;
+        return tensor;
+    }
 }
 
 CustomDatasetFromCSV::CustomDatasetFromCSV(
@@ -41,8 +48,9 @@ torch::data::Example<> CustomDatasetFromCSV::get(std::size_t index)
 {
     auto path = dir_path_ / filename_infos_[index].image_id_;
     auto image = cv::imread(path.string());
+    int flag = std::stoi(filename_infos_[index].flag_);
     cv::resize(image, image, input_size_, cv::INTER_LINEAR);
-    return {convert_to_tensor(image), torch::empty({})};
+    return {convert_to_tensor(image), convert_to_tensor(flag)};
 };
 
 #if(UNIT_TEST_CustomDatasetFromCSV)
@@ -50,27 +58,34 @@ torch::data::Example<> CustomDatasetFromCSV::get(std::size_t index)
 
 namespace
 {
-    //void test_0()
-    //{
-    //    const std::string csv_path = "/home/ubuntu/data/celeba/list_attr_celeba.csv";
-    //    io::CSVReader<2> csv {csv_path};
-    //    int batch_size = 10;
-    //    auto infos = read_names_from_csv(csv, batch_size, "Attractive");
-    //    BOOST_CHECK_EQUAL(10, infos.size());
-    //}
+    void test_read_names_from_csv()
+    {
+        const std::string csv_path = "/home/ubuntu/data/celeba/list_attr_celeba.csv";
+        io::CSVReader<2> csv {csv_path};
+        auto infos = read_names_from_csv(csv, "Attractive");
+        BOOST_CHECK_EQUAL(202599, infos.size());
+    }
 
-    //void test_1()
-    //{
-    //    const std::string csv_path = "/home/ubuntu/data/celeba/list_attr_celeba.csv";
-    //    io::CSVReader<2> csv {csv_path};
-    //    int batch_size = 10;
-    //    extract_vector_from_label(csv, batch_size, "Attractive");
-    //}
+    void test_get()
+    {
+        const std::string csv_path = "/home/ubuntu/data/celeba/list_attr_celeba.csv";
+        const std::string dir_path = "/home/ubuntu/data/celeba/img_align_celeba/";
+        io::CSVReader<2> csv {csv_path};
+        std::vector<int> input_size {128, 128};
+        CustomDatasetFromCSV dataset {dir_path, csv, input_size, "Attractive"};
+        const auto vs = dataset.get(0);
+        const auto& x = vs.data;
+        const auto& y = vs.target;
+        BOOST_REQUIRE_EQUAL((std::vector<std::int64_t>{3, 128, 128}), x.sizes());
+        BOOST_REQUIRE_EQUAL((std::vector<std::int64_t>{1}), y.sizes());
+    }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_CustomDatasetFromCSV)
 {
     std::cout << "CustomDatasetFromCSV\n";
+    test_read_names_from_csv();
+    test_get();
 }
 
 #endif // UNIT_TEST_CustomDatasetFromCSV

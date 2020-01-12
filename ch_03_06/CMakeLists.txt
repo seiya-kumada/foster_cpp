@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 set(PROJ_NAME ch_03_06)
 add_executable(${PROJ_NAME} 
     ./main.cpp
+    ./make_attribute_vectors.cpp
     ../ch_03_05/custom_dataset.cpp
     ./custom_dataset_from_csv.cpp
     ../ch_03_03/variational_auto_encoder.cpp
@@ -15,6 +16,7 @@ target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
     UNIT_TEST=1
     UNIT_TEST_CustomDatasetFromCSV=1
+    UNIT_TEST_make_attribute_vectors=1
 )
 
 set(INCLUDE_DIRS
@@ -22,6 +24,7 @@ set(INCLUDE_DIRS
     ${TORCH_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
     ./
+    /usr/local/cpplinq/CppLinq/
     ../ch_03_03/
     ../ch_03_05/
 )
