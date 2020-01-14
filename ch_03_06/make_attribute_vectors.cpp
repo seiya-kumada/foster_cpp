@@ -20,7 +20,8 @@ void make_attribute_vectors(
     VariationalAutoEncoder& model, 
     int                     batch_size, 
     const torch::Device&    device, 
-    int                     iterations)
+    int                     iterations,
+    int                     z_dim)
 {
     const std::string csv_path = "/home/ubuntu/data/celeba/list_attr_celeba.csv";
     const std::string dir_path = "/home/ubuntu/data/celeba/img_align_celeba/";
@@ -36,16 +37,34 @@ void make_attribute_vectors(
     torch::Tensor z_points {};
     torch::Tensor mu {};
     torch::Tensor log_var {};
-    int current_n_pos = 0;
+    int current_n_pos {0};
+    torch::Tensor zeros {torch::zeros({z_dim}, torch::kFloat)};
+    torch::Tensor current_sum_pos {zeros};
+    torch::Tensor current_mean_pos {zeros};
+    torch::Tensor new_mean_pos {torch::empty({z_dim}, torch::kFloat)};
+    torch::Tensor movement_pos {torch::empty({z_dim}, torch::kFloat)};
     for (auto& batch : *loader)
     {
         std::tie(z_points, mu, log_var) = model->predict(batch.data.to(device));
         const auto& target = batch.target;
         auto z_pos = extract_vectors(target, z_points, 1);
         auto z_neg = extract_vectors(target, z_points, -1);
- 
-        current_n_pos += 1;
+        
+        if (!z_pos.empty())
+        {
+            //
+            current_sum_pos += std::accumulate(std::begin(z_pos), std::end(z_pos), zeros);
+            current_n_pos += z_pos.size();
+            new_mean_pos = current_sum_pos / current_n_pos;
+            auto d = new_mean_pos - current_mean_pos;
+            movement_pos = torch::sqrt(d * d);
+        }
 
+        if (!z_neg.empty())
+        {
+            //
+        }
+        current_n_pos += 1;
         if (current_n_pos == iterations)
         {
             break;
@@ -120,9 +139,10 @@ namespace
 
         //_/_/_/ Make attribute vectors
        
-        int batch_size = 500;
-        int iterations = 1;
-        make_attribute_vectors(model, batch_size, device, iterations);
+        int batch_size {500};
+        int iterations {1};
+        int z_dim {200};
+        make_attribute_vectors(model, batch_size, device, iterations, z_dim);
     }
 
     void test_cpplinq()
@@ -139,13 +159,36 @@ namespace
         z_pos = extract_vectors(target, z_points, -1);
         BOOST_CHECK_EQUAL(1, z_pos.size());
     }
+
+    void test_sum()
+    {
+        torch::Tensor a {torch::ones({3}, torch::kFloat)};
+        torch::Tensor b {torch::ones({3}, torch::kFloat)};
+        torch::Tensor c = a + b;
+        BOOST_CHECK_EQUAL(2, c[0].item<float>());
+        BOOST_CHECK_EQUAL(2, c[1].item<float>());
+        BOOST_CHECK_EQUAL(2, c[2].item<float>());
+    }
+
+    void test_dot()
+    {
+        torch::Tensor a {torch::ones({3}, torch::kFloat)};
+        torch::Tensor b {torch::ones({3}, torch::kFloat)};
+        torch::Tensor c = a + b;
+        torch::Tensor d = torch::sqrt(c * a);
+        BOOST_CHECK_CLOSE(std::sqrt(2.0), d[0].item<float>(), 1.0e-5);
+        BOOST_CHECK_CLOSE(std::sqrt(2.0), d[1].item<float>(), 1.0e-5);
+        BOOST_CHECK_CLOSE(std::sqrt(2.0), d[2].item<float>(), 1.0e-5);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_make_attribute_vectors)
 {
     std::cout << "make_attribute_vectors\n";
-    test_make_attribute_vectors();
+    //test_make_attribute_vectors();
     test_cpplinq();
+    test_sum();
+    test_dot();
 }
 #endif // UNIT_TEST_MAKE_ATTRIBUTE_VECTORS
 
