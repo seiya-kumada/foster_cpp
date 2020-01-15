@@ -3,6 +3,7 @@
 #include "variational_auto_encoder.h"
 #include "csv.h"
 #include <cpplinq.hpp>
+#include <boost/format.hpp>
 
 namespace
 {
@@ -14,6 +15,20 @@ namespace
             >> cpplinq::select([&z_points](const auto& v){ return z_points[v]; })
             >> cpplinq::to_vector();
     }
+
+    std::pair<torch::Tensor, float> update_position(
+        torch::Tensor&                      current_sum,
+        const std::vector<torch::Tensor>&   z,
+        const torch::Tensor&                zeros,
+        const torch::Tensor&                current_mean,
+        int&                                current_n
+    ) {
+        current_sum += std::accumulate(std::begin(z), std::end(z), zeros);
+        current_n += z.size();
+        auto new_mean = current_sum / current_n;
+        auto movement = torch::norm(new_mean - current_mean);
+        return std::make_pair(new_mean, movement.item<float>());
+    } 
 }
 
 void make_attribute_vectors(
@@ -21,13 +36,14 @@ void make_attribute_vectors(
     int                     batch_size, 
     const torch::Device&    device, 
     int                     iterations,
-    int                     z_dim)
+    int                     z_dim,
+    const std::string&      label)
 {
     const std::string csv_path = "/home/ubuntu/data/celeba/list_attr_celeba.csv";
     const std::string dir_path = "/home/ubuntu/data/celeba/img_align_celeba/";
     io::CSVReader<2> csv {csv_path};
     std::vector<int> input_size {128, 128};
-    auto dataset = CustomDatasetFromCSV {dir_path, csv, input_size, "Attractive"}
+    auto dataset = CustomDatasetFromCSV {dir_path, csv, input_size, label}
         .map(torch::data::transforms::Normalize<>(0, 255.0))
         .map(torch::data::transforms::Stack<>());
     const auto loader = torch::data::make_data_loader<torch::data::samplers::RandomSampler>(
@@ -37,12 +53,24 @@ void make_attribute_vectors(
     torch::Tensor z_points {};
     torch::Tensor mu {};
     torch::Tensor log_var {};
-    int current_n_pos {0};
+
     torch::Tensor zeros {torch::zeros({z_dim}, torch::kFloat)};
+    
+    int current_n_pos {0};
     torch::Tensor current_sum_pos {zeros};
     torch::Tensor current_mean_pos {zeros};
     torch::Tensor new_mean_pos {torch::empty({z_dim}, torch::kFloat)};
-    torch::Tensor movement_pos {torch::empty({z_dim}, torch::kFloat)};
+    float movement_pos {0.0f};
+    
+    int current_n_neg {0};
+    torch::Tensor current_sum_neg {zeros};
+    torch::Tensor current_mean_neg {zeros};
+    torch::Tensor new_mean_neg {torch::empty({z_dim}, torch::kFloat)};
+    float movement_neg {0.0f};
+
+    torch::Tensor current_vector {torch::empty({z_dim}, torch::kFloat)};
+    float current_dist = 0.0f;
+
     for (auto& batch : *loader)
     {
         std::tie(z_points, mu, log_var) = model->predict(batch.data.to(device));
@@ -52,18 +80,47 @@ void make_attribute_vectors(
         
         if (!z_pos.empty())
         {
-            //
-            current_sum_pos += std::accumulate(std::begin(z_pos), std::end(z_pos), zeros);
-            current_n_pos += z_pos.size();
-            new_mean_pos = current_sum_pos / current_n_pos;
-            auto d = new_mean_pos - current_mean_pos;
-            movement_pos = torch::sqrt(d * d);
+            std::tie(new_mean_pos, movement_pos) = update_position(
+                current_sum_pos,
+                z_pos,
+                zeros,
+                current_mean_pos,
+                current_n_pos);
         }
 
         if (!z_neg.empty())
         {
-            //
+             std::tie(new_mean_neg, movement_neg) = update_position(
+                current_sum_neg,
+                z_neg,
+                zeros,
+                current_mean_neg,
+                current_n_neg);
         }
+
+        current_vector = new_mean_pos - new_mean_neg;
+        auto new_dist = torch::norm(current_vector);
+        auto dist_change = new_dist - current_dist;
+
+        std::cout << boost::format("%1% :%2% :%3% :%4% :%5%") 
+            % current_n_pos 
+            % movement_pos
+            % movement_neg
+            % new_dist
+            % dist_change;
+        
+        current_mean_pos = new_mean_pos.clone();
+        current_mean_neg = new_mean_neg.clone();
+        current_dist = new_dist.item<float>();
+
+        auto e = movement_pos + movement_neg;
+        if (e < 0.08)
+        {
+            current_vector /= current_dist;
+            std::cout << "Found the " << label << " vector\n";
+            break;
+        }
+
         current_n_pos += 1;
         if (current_n_pos == iterations)
         {
@@ -142,7 +199,7 @@ namespace
         int batch_size {500};
         int iterations {1};
         int z_dim {200};
-        make_attribute_vectors(model, batch_size, device, iterations, z_dim);
+        make_attribute_vectors(model, batch_size, device, iterations, z_dim, "Attractive");
     }
 
     void test_cpplinq()
@@ -180,6 +237,27 @@ namespace
         BOOST_CHECK_CLOSE(std::sqrt(2.0), d[1].item<float>(), 1.0e-5);
         BOOST_CHECK_CLOSE(std::sqrt(2.0), d[2].item<float>(), 1.0e-5);
     }
+
+    void test_update_position()
+    {
+        int z_dim = 3;
+        auto current_sum {torch::zeros({z_dim}, torch::kFloat)};
+        auto z = std::vector<torch::Tensor>{
+            2 * torch::ones({z_dim}, torch::kFloat), 
+            3 * torch::ones({z_dim}, torch::kFloat), 
+        };
+        auto zeros {torch::zeros({z_dim}, torch::kFloat)};
+        auto current_mean {zeros};
+        int current_n = 0;
+       
+        auto new_mean {zeros};
+        float movement {0.0f};
+        std::tie(new_mean, movement) = update_position(current_sum, z, zeros, current_mean, current_n);
+        BOOST_CHECK_CLOSE(2.5, new_mean[0].item<float>(), 1.0e-5);
+        BOOST_CHECK_CLOSE(2.5, new_mean[1].item<float>(), 1.0e-5);
+        BOOST_CHECK_CLOSE(2.5, new_mean[2].item<float>(), 1.0e-5);
+        BOOST_CHECK_CLOSE(std::sqrt(3 * std::pow(2.5, 2)), movement, 1.0e-5);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_make_attribute_vectors)
@@ -189,6 +267,7 @@ BOOST_AUTO_TEST_CASE(TEST_make_attribute_vectors)
     test_cpplinq();
     test_sum();
     test_dot();
+    test_update_position();
 }
 #endif // UNIT_TEST_MAKE_ATTRIBUTE_VECTORS
 

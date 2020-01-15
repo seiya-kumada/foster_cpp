@@ -7,7 +7,10 @@ class VariationalAutoEncoder;
 void make_attribute_vectors(
     VariationalAutoEncoder& model, 
     int                     batch_size, 
-    const torch::Device&    device);
+    const torch::Device&    device, 
+    int                     iterations,
+    int                     z_dim,
+    const std::string&      label);
 
 #endif // MAKE_ATTRIBUTE_VECTORS_H
  
