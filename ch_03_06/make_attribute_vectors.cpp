@@ -7,6 +7,7 @@
 
 namespace
 {
+    // test ok
     std::vector<torch::Tensor> extract_vectors(const torch::Tensor& target, const torch::Tensor& z_points, int flag)
     {
         int size = target.size(0);
@@ -16,28 +17,51 @@ namespace
             >> cpplinq::to_vector();
     }
 
-    std::pair<torch::Tensor, float> update_position(
-        torch::Tensor&                      current_sum,
-        const std::vector<torch::Tensor>&   z,
-        const torch::Tensor&                zeros,
-        const torch::Tensor&                current_mean,
-        int&                                current_n
-    ) {
-        current_sum += std::accumulate(std::begin(z), std::end(z), zeros);
-        current_n += z.size();
-        auto new_mean = current_sum / current_n;
-        auto movement = torch::norm(new_mean - current_mean);
-        return std::make_pair(new_mean, movement.item<float>());
-    } 
+    // test ok
+    class Group
+    {
+    private:
+        int             current_n_;
+        torch::Tensor   current_sum_;
+        torch::Tensor   current_mean_;
+        torch::Tensor   zeros_;
+        torch::Tensor   new_mean_;
+        float           movement_;
+
+    public:
+        Group(int z_dim, torch::Device device)
+            : current_n_{0}
+            , current_sum_{torch::zeros({z_dim}, torch::kFloat).to(device)}
+            , current_mean_{torch::zeros({z_dim}, torch::kFloat).to(device)}
+            , zeros_{torch::zeros({z_dim}, torch::kFloat).to(device)}
+            , new_mean_{torch::zeros({z_dim}, torch::kFloat).to(device)}
+            , movement_{0.0f}
+        {}
+
+        void update(const std::vector<torch::Tensor>& z)
+        {
+            current_sum_ += std::accumulate(std::begin(z), std::end(z), zeros_);
+            current_n_ += z.size();
+            new_mean_ = current_sum_ / current_n_;
+            movement_ = torch::norm(new_mean_ - current_mean_).item<float>();
+            current_mean_ = new_mean_.clone();
+        }
+
+        int get_current_n() const { return current_n_; }
+        const torch::Tensor get_new_mean() const { return new_mean_; }
+        float get_movement() const { return movement_; }
+    };
 }
 
-void make_attribute_vectors(
+
+torch::Tensor make_attribute_vectors(
     VariationalAutoEncoder& model, 
     int                     batch_size, 
     const torch::Device&    device, 
     int                     iterations,
     int                     z_dim,
-    const std::string&      label)
+    const std::string&      label,
+    bool                    is_verbose)
 {
     const std::string csv_path = "/home/ubuntu/data/celeba/list_attr_celeba.csv";
     const std::string dir_path = "/home/ubuntu/data/celeba/img_align_celeba/";
@@ -56,21 +80,11 @@ void make_attribute_vectors(
 
     torch::Tensor zeros {torch::zeros({z_dim}, torch::kFloat)};
     
-    int current_n_pos {0};
-    torch::Tensor current_sum_pos {zeros};
-    torch::Tensor current_mean_pos {zeros};
-    torch::Tensor new_mean_pos {torch::empty({z_dim}, torch::kFloat)};
-    float movement_pos {0.0f};
-    
-    int current_n_neg {0};
-    torch::Tensor current_sum_neg {zeros};
-    torch::Tensor current_mean_neg {zeros};
-    torch::Tensor new_mean_neg {torch::empty({z_dim}, torch::kFloat)};
-    float movement_neg {0.0f};
+    Group group_pos {z_dim, device};
+    Group group_neg {z_dim, device};
 
     torch::Tensor current_vector {torch::empty({z_dim}, torch::kFloat)};
     float current_dist = 0.0f;
-
     for (auto& batch : *loader)
     {
         std::tie(z_points, mu, log_var) = model->predict(batch.data.to(device));
@@ -80,53 +94,43 @@ void make_attribute_vectors(
         
         if (!z_pos.empty())
         {
-            std::tie(new_mean_pos, movement_pos) = update_position(
-                current_sum_pos,
-                z_pos,
-                zeros,
-                current_mean_pos,
-                current_n_pos);
+            group_pos.update(z_pos);
         }
 
         if (!z_neg.empty())
         {
-             std::tie(new_mean_neg, movement_neg) = update_position(
-                current_sum_neg,
-                z_neg,
-                zeros,
-                current_mean_neg,
-                current_n_neg);
+            group_neg.update(z_neg);
         }
 
-        current_vector = new_mean_pos - new_mean_neg;
-        auto new_dist = torch::norm(current_vector);
+        current_vector = group_pos.get_new_mean() - group_neg.get_new_mean();
+        auto new_dist = torch::norm(current_vector).item<float>();
         auto dist_change = new_dist - current_dist;
 
-        std::cout << boost::format("%1% :%2% :%3% :%4% :%5%") 
-            % current_n_pos 
-            % movement_pos
-            % movement_neg
-            % new_dist
-            % dist_change;
-        
-        current_mean_pos = new_mean_pos.clone();
-        current_mean_neg = new_mean_neg.clone();
-        current_dist = new_dist.item<float>();
+        if (is_verbose)
+        {
+            std::cout << boost::format("%1% :%2% :%3% :%4% :%5%\n") 
+                % group_pos.get_current_n() 
+                % group_pos.get_movement()
+                % group_neg.get_movement()
+                % new_dist
+                % dist_change;
+        } 
+        current_dist = new_dist;
 
-        auto e = movement_pos + movement_neg;
+        auto e = group_pos.get_movement() + group_neg.get_movement();
         if (e < 0.08)
         {
             current_vector /= current_dist;
             std::cout << "Found the " << label << " vector\n";
             break;
         }
-
-        current_n_pos += 1;
-        if (current_n_pos == iterations)
+        
+        if (group_pos.get_current_n() == iterations)
         {
             break;
         }
     }
+    return current_vector;
 }
 
 #if(UNIT_TEST_make_attribute_vectors)
@@ -196,25 +200,36 @@ namespace
 
         //_/_/_/ Make attribute vectors
        
-        int batch_size {500};
-        int iterations {1};
+        int batch_size {50};
+        int iterations {10000};
         int z_dim {200};
-        make_attribute_vectors(model, batch_size, device, iterations, z_dim, "Attractive");
+        auto v = make_attribute_vectors(model, batch_size, device, iterations, z_dim, "Attractive", false);
+        auto d = torch::norm(v);
+        BOOST_CHECK_CLOSE(d.item<float>(), 1, 1.0e-4);
+        //std::cout << v << std::endl;
     }
-
-    void test_cpplinq()
+    
+    void test_extract_vectors()
     {
         int batch_size = 3;
         int z_dim = 2;
         torch::Tensor z_points = torch::ones({batch_size, z_dim});
+        z_points[0][0] = 2;
+        z_points[0][1] = 2;
         torch::Tensor target = torch::ones({batch_size, 1}, torch::kInt64);
         target[0] = -1;
 
         auto z_pos = extract_vectors(target, z_points, 1);
         BOOST_CHECK_EQUAL(2, z_pos.size());
+        BOOST_CHECK_EQUAL(z_pos[0][0].item<float>(), 1);
+        BOOST_CHECK_EQUAL(z_pos[0][1].item<float>(), 1);
+        BOOST_CHECK_EQUAL(z_pos[1][0].item<float>(), 1);
+        BOOST_CHECK_EQUAL(z_pos[1][1].item<float>(), 1);
         
         z_pos = extract_vectors(target, z_points, -1);
         BOOST_CHECK_EQUAL(1, z_pos.size());
+        BOOST_CHECK_EQUAL(z_pos[0][0].item<float>(), 2);
+        BOOST_CHECK_EQUAL(z_pos[0][1].item<float>(), 2);
     }
 
     void test_sum()
@@ -238,36 +253,99 @@ namespace
         BOOST_CHECK_CLOSE(std::sqrt(2.0), d[2].item<float>(), 1.0e-5);
     }
 
-    void test_update_position()
+    void test_zero()
     {
-        int z_dim = 3;
-        auto current_sum {torch::zeros({z_dim}, torch::kFloat)};
-        auto z = std::vector<torch::Tensor>{
-            2 * torch::ones({z_dim}, torch::kFloat), 
-            3 * torch::ones({z_dim}, torch::kFloat), 
-        };
-        auto zeros {torch::zeros({z_dim}, torch::kFloat)};
-        auto current_mean {zeros};
-        int current_n = 0;
-       
-        auto new_mean {zeros};
-        float movement {0.0f};
-        std::tie(new_mean, movement) = update_position(current_sum, z, zeros, current_mean, current_n);
-        BOOST_CHECK_CLOSE(2.5, new_mean[0].item<float>(), 1.0e-5);
-        BOOST_CHECK_CLOSE(2.5, new_mean[1].item<float>(), 1.0e-5);
-        BOOST_CHECK_CLOSE(2.5, new_mean[2].item<float>(), 1.0e-5);
-        BOOST_CHECK_CLOSE(std::sqrt(3 * std::pow(2.5, 2)), movement, 1.0e-5);
+        torch::Tensor zeros {torch::zeros({3}, torch::kFloat)};
+        torch::Tensor a {zeros.clone()};
+        torch::Tensor b {zeros.clone()};
+        a += torch::ones({3}); 
+        b += torch::ones({3});
+        BOOST_CHECK_EQUAL(a[0].item<float>(), 1);
+        BOOST_CHECK_EQUAL(a[1].item<float>(), 1);
+        BOOST_CHECK_EQUAL(a[2].item<float>(), 1);
+        BOOST_CHECK_EQUAL(b[0].item<float>(), 1);
+        BOOST_CHECK_EQUAL(b[1].item<float>(), 1);
+        BOOST_CHECK_EQUAL(b[2].item<float>(), 1);
+    }
+
+    void test_group()
+    {
+        int z_dim {2};
+        std::vector<torch::Tensor> pos_zs {};
+        std::vector<torch::Tensor> neg_zs {};
+        int s = 1000;
+        pos_zs.reserve(s);
+        neg_zs.reserve(s);
+        for (auto i = 0; i < s; ++i)
+        {
+            auto pz = torch::empty({z_dim}, torch::kFloat).normal_() + torch::ones({z_dim}, torch::kFloat);
+            pos_zs.emplace_back(std::move(pz));
+            
+            auto nz = torch::empty({z_dim}, torch::kFloat).normal_() + 5 * torch::ones({z_dim}, torch::kFloat);
+            neg_zs.emplace_back(std::move(nz));
+        }
+        
+        torch::Device device {torch::kCPU};
+        Group pos_group {z_dim, device};
+        Group neg_group {z_dim, device};
+
+        pos_group.update(pos_zs);
+        neg_group.update(neg_zs);
+
+        auto pos_new_mean = pos_group.get_new_mean();
+        auto neg_new_mean = neg_group.get_new_mean();
+        
+        for (auto i = 0; i < z_dim; ++i)
+        {
+            BOOST_CHECK(std::abs(pos_new_mean[i].item<float>() - 1.0) < 0.1);
+            BOOST_CHECK(std::abs(neg_new_mean[i].item<float>() - 5.0) < 0.1);
+        }
+
+        BOOST_CHECK(std::abs(std::sqrt(2) - pos_group.get_movement()) < 0.1);
+        BOOST_CHECK(std::abs(std::sqrt(2) * 5 - neg_group.get_movement()) < 0.1);
+
+        for (auto i = 0; i < 10; ++i)
+        {
+            pos_zs.clear();
+            neg_zs.clear();
+            pos_zs.reserve(s);
+            neg_zs.reserve(s);
+            for (auto i = 0; i < s; ++i)
+            {
+                auto pz = torch::empty({z_dim}, torch::kFloat).normal_() + torch::ones({z_dim}, torch::kFloat);
+                pos_zs.emplace_back(std::move(pz));
+                
+                auto nz = torch::empty({z_dim}, torch::kFloat).normal_() + 5 * torch::ones({z_dim}, torch::kFloat);
+                neg_zs.emplace_back(std::move(nz));
+            }
+            BOOST_CHECK(pos_zs.size() == s);
+            BOOST_CHECK(neg_zs.size() == s);
+
+            pos_group.update(pos_zs);
+            neg_group.update(neg_zs);
+
+            //std::cout << "pos: " << pos_group.get_movement() << std::endl;
+            //std::cout << "neg: " << neg_group.get_movement() << std::endl;
+        }
+        pos_new_mean = pos_group.get_new_mean();
+        neg_new_mean = neg_group.get_new_mean();
+        for (auto i = 0; i < z_dim; ++i)
+        {
+            BOOST_CHECK(std::abs(pos_new_mean[i].item<float>() - 1.0) < 0.1);
+            BOOST_CHECK(std::abs(neg_new_mean[i].item<float>() - 5.0) < 0.1);
+        }
     }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_make_attribute_vectors)
 {
     std::cout << "make_attribute_vectors\n";
-    //test_make_attribute_vectors();
-    test_cpplinq();
+    test_make_attribute_vectors();
+    test_extract_vectors();
     test_sum();
     test_dot();
-    test_update_position();
+    test_zero();
+    test_group();
 }
 #endif // UNIT_TEST_MAKE_ATTRIBUTE_VECTORS
 
