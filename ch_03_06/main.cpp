@@ -6,6 +6,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <fstream>
+#include "make_attribute_vectors.h"
 
 namespace fs = boost::filesystem;
 
@@ -14,8 +15,9 @@ namespace
     const std::string MODEL_DIR_PATH    {"/home/ubuntu/data/foster/ch03_05/"};
     const std::string OUTPUT_DIR_PATH   {"/home/ubuntu/data/foster/ch03_06/"};
     const std::string DATA_DIR_PATH     {"/home/ubuntu/data/celeba/img_align_celeba"};
-    constexpr int64_t BATCH_SIZE        {10};
- 
+    constexpr int64_t BATCH_SIZE        {500};
+    const int         Z_DIM             {200};
+
     VariationalAutoEncoder make_model(const torch::Device& device)
     {
         const int                     encoder_start_channles    {3};
@@ -26,7 +28,7 @@ namespace
         const std::vector<int>        decoder_conv_filters      {64, 64, 32,  3};
         const std::vector<int>        decoder_conv_kernel_sizes { 3,  3,  3,  3};
         const std::vector<int>        decoder_conv_strides      { 2,  2,  2,  2};
-        const int                     z_dim                     {200};
+        const int                     z_dim                     {Z_DIM};
 
         return VariationalAutoEncoder{
             encoder_start_channles,
@@ -132,7 +134,7 @@ namespace
 
     void make_newly_generated_faces(VariationalAutoEncoder& model, const torch::Device& device)
     {
-        auto size = std::vector<std::int64_t>{10, 200};
+        auto size = std::vector<std::int64_t>{10, Z_DIM};
         const auto znew_0 = torch::empty(size).normal_().to(device);
         auto reconst_0 = model->get_decoder()->forward(znew_0).to("cpu");
         
@@ -145,6 +147,40 @@ namespace
         auto vs = torch::cat({reconst_0, reconst_1}, 0);
         std::cout << vs.sizes() << std::endl;
         save_images(vs, "newly_generated_images");
+    }
+
+    void make_attribute_vectors(
+        VariationalAutoEncoder& model, 
+        int                     batch_size, 
+        const torch::Device&    device,
+        bool                    is_verbose)
+    {
+        int iterations = 10000;
+        auto attractive_vec = make_attribute_vectors(
+            model, batch_size, device, iterations, Z_DIM, "Attractive", is_verbose).to(torch::kCPU);
+        std::cout << "Attractive done\n";
+
+        auto mouth_open_vec = make_attribute_vectors(
+            model, batch_size, device, iterations, Z_DIM, "Mouth_Slightly_Open", is_verbose).to(torch::kCPU);
+        std::cout << "Mouth_Slightly_Open done\n";
+        
+        auto smiling_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Smiling", is_verbose);
+        std::cout << "Smiling done\n";
+        
+        auto lipstick_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Wearing_Lipstick", is_verbose);
+        std::cout << "Wearing_Lipstick done\n";
+        
+        auto young_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "High_Cheekbones", is_verbose);
+        std::cout << "High_Cheekbones done\n";
+        
+        auto male_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Male", is_verbose);
+        std::cout << "Male done\n";
+        
+        auto eyeglasses_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Eyeglasses", is_verbose);
+        std::cout << "Eyeglasses done\n";
+        
+        auto blonde_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Blond_Hair", is_verbose);
+        std::cout << "Blond_Hair done\n";
     }
 }
 
@@ -163,6 +199,13 @@ BOOST_AUTO_TEST_CASE(TEST_main)
 
 int main(int argc, const char* argv[])
 {
+    if (torch::cuda::cudnn_is_available())
+    {
+        std::cout << "Has CuDNN\n";
+    }
+    
+    torch::NoGradGuard no_grad_guard {};
+
     //_/_/_/ Select device
 
     torch::manual_seed(1);
@@ -206,8 +249,11 @@ int main(int argc, const char* argv[])
     
     //_/_/_/ Make newly generated faces
     
-    make_newly_generated_faces(model, device);
+    //make_newly_generated_faces(model, device);
     
+    //_/_/_/ Make attribute vectors
+
+    make_attribute_vectors(model, BATCH_SIZE, device, true);
 
     return 0;
 }

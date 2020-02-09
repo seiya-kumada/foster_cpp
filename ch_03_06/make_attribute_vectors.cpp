@@ -72,7 +72,7 @@ torch::Tensor make_attribute_vectors(
         .map(torch::data::transforms::Stack<>());
     const auto loader = torch::data::make_data_loader<torch::data::samplers::RandomSampler>(
         std::move(dataset),
-        torch::data::DataLoaderOptions().batch_size(batch_size).workers(2));
+        torch::data::DataLoaderOptions().batch_size(batch_size).workers(4));
 
     torch::Tensor z_points {};
     torch::Tensor mu {};
@@ -91,6 +91,7 @@ torch::Tensor make_attribute_vectors(
         const auto& target = batch.target;
         auto z_pos = extract_vectors(target, z_points, 1);
         auto z_neg = extract_vectors(target, z_points, -1);
+        assert(z_pos.size() + z_neg.size() == batch.data.size(0));
         
         if (!z_pos.empty())
         {
@@ -108,7 +109,7 @@ torch::Tensor make_attribute_vectors(
 
         if (is_verbose)
         {
-            std::cout << boost::format("%1% :%2% :%3% :%4% :%5%\n") 
+            std::cout << boost::format("num: %1% pos_mov: %2% neg_mov: %3% dist: %4% dist_change: %5%\n") 
                 % group_pos.get_current_n() 
                 % group_pos.get_movement()
                 % group_neg.get_movement()
