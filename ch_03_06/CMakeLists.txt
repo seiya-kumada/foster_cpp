@@ -3,6 +3,7 @@ set(PROJ_NAME ch_03_06)
 add_executable(${PROJ_NAME} 
     ./main.cpp
     ./make_attribute_vectors.cpp
+    ./add_attribute_vectors.cpp
     ../ch_03_05/custom_dataset.cpp
     ./custom_dataset_from_csv.cpp
     ../ch_03_03/variational_auto_encoder.cpp

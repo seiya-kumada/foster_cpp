@@ -7,6 +7,7 @@
 #include <opencv2/highgui.hpp>
 #include <fstream>
 #include "make_attribute_vectors.h"
+#include "add_attribute_vectors.h"
 
 namespace fs = boost::filesystem;
 
@@ -149,39 +150,82 @@ namespace
         save_images(vs, "newly_generated_images");
     }
 
+    inline std::string tolowercase(const std::string& src)
+    {
+        std::string dst {src};
+        std::transform(std::begin(src), std::end(src), std::begin(dst), tolower); 
+        return dst;
+    }
+
+    void make_attribute_vectors(
+        VariationalAutoEncoder& model, 
+        int                     batch_size, 
+        const torch::Device&    device,
+        bool                    is_verbose, 
+        const fs::path&         sub_dir_path,
+        int                     iterations,
+        const std::string&      name)
+    {
+        auto vec = make_attribute_vectors(
+            model, batch_size, device, iterations, Z_DIM, name, is_verbose).to(torch::kCPU);
+        auto path = sub_dir_path / (boost::format("%1%_vec.pt") % tolowercase(name)).str();
+        torch::save(vec, path.string());
+        std::cout << boost::format("%1% done\n") % name;
+    }
+
     void make_attribute_vectors(
         VariationalAutoEncoder& model, 
         int                     batch_size, 
         const torch::Device&    device,
         bool                    is_verbose)
     {
+        auto sub_dir_path = fs::path(OUTPUT_DIR_PATH) / "attribute_vecs";
         int iterations = 10000;
-        auto attractive_vec = make_attribute_vectors(
-            model, batch_size, device, iterations, Z_DIM, "Attractive", is_verbose).to(torch::kCPU);
-        std::cout << "Attractive done\n";
-
-        auto mouth_open_vec = make_attribute_vectors(
-            model, batch_size, device, iterations, Z_DIM, "Mouth_Slightly_Open", is_verbose).to(torch::kCPU);
-        std::cout << "Mouth_Slightly_Open done\n";
-        
-        auto smiling_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Smiling", is_verbose);
-        std::cout << "Smiling done\n";
-        
-        auto lipstick_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Wearing_Lipstick", is_verbose);
-        std::cout << "Wearing_Lipstick done\n";
-        
-        auto young_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "High_Cheekbones", is_verbose);
-        std::cout << "High_Cheekbones done\n";
-        
-        auto male_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Male", is_verbose);
-        std::cout << "Male done\n";
-        
-        auto eyeglasses_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Eyeglasses", is_verbose);
-        std::cout << "Eyeglasses done\n";
-        
-        auto blonde_vec = make_attribute_vectors(model, batch_size, device, iterations, Z_DIM, "Blond_Hair", is_verbose);
-        std::cout << "Blond_Hair done\n";
+    
+        make_attribute_vectors(model, batch_size, device, is_verbose, sub_dir_path, iterations, "Attractive");
+        make_attribute_vectors(model, batch_size, device, is_verbose, sub_dir_path, iterations, "Mouth_Slightly_Open");
+        make_attribute_vectors(model, batch_size, device, is_verbose, sub_dir_path, iterations, "Smiling");
+        make_attribute_vectors(model, batch_size, device, is_verbose, sub_dir_path, iterations, "Wearing_Lipstick");
+        make_attribute_vectors(model, batch_size, device, is_verbose, sub_dir_path, iterations, "High_Cheekbones");
+        make_attribute_vectors(model, batch_size, device, is_verbose, sub_dir_path, iterations, "Male");
+        make_attribute_vectors(model, batch_size, device, is_verbose, sub_dir_path, iterations, "Eyeglasses");
+        make_attribute_vectors(model, batch_size, device, is_verbose, sub_dir_path, iterations, "Blond_Hair");
     }
+
+    template<typename Dataset>
+    void add_attribute_vectors(
+        VariationalAutoEncoder& model, 
+        const Dataset&          dataset,
+        int                     batch_size, 
+        const torch::Device&    device, 
+        const fs::path&         sub_dir_path,
+        const std::string&      name)
+    {
+        auto path = sub_dir_path / (boost::format("%1%_vec.pt") % tolowercase(name)).str();
+        torch::Tensor vec {};
+        torch::load(vec, path.string());
+        auto images = add_attribute_vectors(model, dataset, batch_size, device, vec);
+    }
+
+    template<typename Dataset>
+    void add_attribute_vectors(
+        VariationalAutoEncoder& model, 
+        const Dataset&          dataset,
+        int                     batch_size, 
+        const torch::Device&    device)
+    {
+        auto sub_dir_path = fs::path(OUTPUT_DIR_PATH) / "attribute_vecs";
+
+        add_attribute_vectors(model, dataset, batch_size, device, sub_dir_path, "Attractive");
+        //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Mouth_Slightly_Open");
+        //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Smiling");
+        //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Wearing_Lipstick");
+        //add_attribute_vectors(model, batch_size, device, sub_dir_path, "High_Cheekbones");
+        //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Male");
+        //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Eyeglasses");
+        //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Blond_Hair");
+    }
+
 }
 
 #if(UNIT_TEST)
@@ -253,8 +297,11 @@ int main(int argc, const char* argv[])
     
     //_/_/_/ Make attribute vectors
 
-    make_attribute_vectors(model, BATCH_SIZE, device, true);
+    //make_attribute_vectors(model, BATCH_SIZE, device, true);
 
+    //_/_/_/ Add attribute vectors
+    add_attribute_vectors(model, dataset, 10, device);
+ 
     return 0;
 }
 
