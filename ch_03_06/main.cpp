@@ -201,10 +201,11 @@ namespace
         const fs::path&         sub_dir_path,
         const std::string&      name)
     {
-        auto path = sub_dir_path / (boost::format("%1%_vec.pt") % tolowercase(name)).str();
+        const auto path = sub_dir_path / (boost::format("%1%_vec.pt") % tolowercase(name)).str();
         torch::Tensor vec {};
         torch::load(vec, path.string());
-        auto images = add_attribute_vectors(model, dataset, batch_size, device, vec);
+        const auto changed_images = add_attribute_vectors(model, dataset, batch_size, device, vec);
+        save_images(changed_images, "changed_images");
     }
 
     template<typename Dataset>
