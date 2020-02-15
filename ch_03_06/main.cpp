@@ -204,8 +204,12 @@ namespace
         const auto path = sub_dir_path / (boost::format("%1%_vec.pt") % tolowercase(name)).str();
         torch::Tensor vec {};
         torch::load(vec, path.string());
-        const auto changed_images = add_attribute_vectors(model, dataset, batch_size, device, vec);
-        save_images(changed_images, "changed_images");
+        torch::Tensor originals {};
+        torch::Tensor changeds {};
+        std::tie(originals, changeds) = add_attribute_vectors(model, dataset, batch_size, device, vec);
+        std::cout << originals.sizes() << ", " << changeds.sizes() << std::endl;
+        save_images(originals, "originals");
+        save_images(changeds, "changeds");
     }
 
     template<typename Dataset>
@@ -217,13 +221,13 @@ namespace
     {
         auto sub_dir_path = fs::path(OUTPUT_DIR_PATH) / "attribute_vecs";
 
-        add_attribute_vectors(model, dataset, batch_size, device, sub_dir_path, "Attractive");
+        //add_attribute_vectors(model, dataset, batch_size, device, sub_dir_path, "Attractive");
         //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Mouth_Slightly_Open");
         //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Smiling");
         //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Wearing_Lipstick");
         //add_attribute_vectors(model, batch_size, device, sub_dir_path, "High_Cheekbones");
         //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Male");
-        //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Eyeglasses");
+        add_attribute_vectors(model, dataset, batch_size, device, sub_dir_path, "Eyeglasses");
         //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Blond_Hair");
     }
 
@@ -301,7 +305,7 @@ int main(int argc, const char* argv[])
     //make_attribute_vectors(model, BATCH_SIZE, device, true);
 
     //_/_/_/ Add attribute vectors
-    add_attribute_vectors(model, dataset, 10, device);
+    add_attribute_vectors(model, dataset, 5, device);
  
     return 0;
 }

@@ -6,7 +6,7 @@
 #include <torch/torch.h>
 
 template<typename Dataset>
-torch::Tensor add_attribute_vectors(
+std::pair<torch::Tensor, torch::Tensor> add_attribute_vectors(
     VariationalAutoEncoder& model, 
     const Dataset&          dataset,
     int                     batch_size, 
@@ -26,7 +26,7 @@ torch::Tensor add_attribute_vectors(
 
     std::vector<int> factors = {-4, -3, -2, -1, 0, 1, 2, 3, 4};
     int total_size = batch_size * factors.size();
-    torch::Tensor images {torch::empty({total_size, 3, 128, 128}, torch::kFloat)};
+    torch::Tensor changed_images {torch::empty({total_size, 3, 128, 128}, torch::kFloat)};
     int c = 0;
     for (auto i = 0; i < batch_size; ++i)
     {
@@ -35,11 +35,11 @@ torch::Tensor add_attribute_vectors(
         {
             const auto changed_z_point = torch::unsqueeze(z_point + feature_vec * factor, 0); 
             const auto changed_image = model->get_decoder()->forward(changed_z_point.to(device));
-            images[c] = torch::squeeze(changed_image);
+            changed_images[c] = torch::squeeze(changed_image);
             c += 1;
         } 
     }
-    return images;
+    return {data, changed_images};
 }
 
 #endif // ADD_ATTRIBUTE_VECTORS_H
