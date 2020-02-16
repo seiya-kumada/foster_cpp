@@ -8,6 +8,7 @@
 #include <fstream>
 #include "make_attribute_vectors.h"
 #include "add_attribute_vectors.h"
+#include "morph_faces.h"
 
 namespace fs = boost::filesystem;
 
@@ -231,6 +232,28 @@ namespace
         //add_attribute_vectors(model, batch_size, device, sub_dir_path, "Blond_Hair");
     }
 
+    template<typename Dataset>
+    void morph_faces(
+        VariationalAutoEncoder& model, 
+        const Dataset&          dataset, 
+        const torch::Device&    device)
+    {
+        torch::Tensor originals {};
+        torch::Tensor changeds {};
+        std::tie(originals, changeds) = morph_faces_(model, dataset, device);
+        save_images(originals, "morphed_images/originals");
+        save_images(changeds, "morphed_images/changeds");
+    }
+
+    //template<typename Dataset>
+    //void add_attribute_vectors(
+    //    VariationalAutoEncoder& model, 
+    //    const Dataset&          dataset,
+    //    int                     batch_size, 
+    //    const torch::Device&    device)
+    //{
+    //    auto sub_dir_path = fs::path(OUTPUT_DIR_PATH) / "attribute_vecs";
+    //}
 }
 
 #if(UNIT_TEST)
@@ -305,8 +328,11 @@ int main(int argc, const char* argv[])
     //make_attribute_vectors(model, BATCH_SIZE, device, true);
 
     //_/_/_/ Add attribute vectors
-    add_attribute_vectors(model, dataset, 5, device);
+    //add_attribute_vectors(model, dataset, 5, device);
  
+    //_/_/_/ Morph faces
+    morph_faces(model, dataset, device);
+
     return 0;
 }
 
