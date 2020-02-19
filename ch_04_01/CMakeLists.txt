@@ -15,8 +15,8 @@ find_package(Boost REQUIRED COMPONENTS unit_test_framework filesystem program_op
 
 target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
-    #UNIT_TEST=0
-    #UNIT_TEST_CustomDatasetFromCSV=0
+    UNIT_TEST=1
+    UNIT_TEST_GAN=1
     #UNIT_TEST_make_attribute_vectors=0
 )
 
