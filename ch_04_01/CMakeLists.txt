@@ -40,7 +40,7 @@ set(LIBRARIES
 include_directories(${INCLUDE_DIRS})
 target_link_libraries (${PROJ_NAME} ${LIBRARIES})
 
-set_property(TARGET ${PROJ_NAME} PROPERTY CXX_STANDARD 14)
+set_property(TARGET ${PROJ_NAME} PROPERTY CXX_STANDARD 17)
 message(STATUS ${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
 message(STATUS ${Boost_LIBRARY_DIRS})
