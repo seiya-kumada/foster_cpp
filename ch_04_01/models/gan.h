@@ -10,6 +10,8 @@ public:
     struct Params
     {
         int                     start_channels_;
+        std::vector<int64_t>    before_flatten_shape_;
+        int64_t                 flatten_size_;
         std::vector<int>        conv_filters_;
         std::vector<int>        kernel_size_;
         std::vector<int>        strides_;
@@ -21,6 +23,7 @@ public:
 
         Params(
             int                             start_channels,
+            const std::vector<int64_t>&     before_flatten_shape_,
             const std::vector<int>&         conv_filters,
             const std::vector<int>&         kernel_size,
             const std::vector<int>&         strides,
@@ -39,6 +42,10 @@ public:
         int                     z_dim,
         const torch::Device&    device
     );
+
+    const torch::nn::Sequential& get_discriminator() const { return discriminator_; }
+    torch::nn::Sequential& get_discriminator() { return discriminator_; }
+
     
 private:
     Params              discriminator_params_;
@@ -48,7 +55,9 @@ private:
     std::string         optimizer_;
     int                 z_dim_;
     torch::Device       device_;
-    
+
+    torch::nn::Sequential   discriminator_;
+
     void build();
     torch::nn::Sequential build_discriminator();
     void build_generator();
