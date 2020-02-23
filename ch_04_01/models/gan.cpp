@@ -2,7 +2,7 @@
 
 namespace
 {
-    void print_parameters(const GAN& model)
+    void print_parameters(const torch::nn::Sequential& model)
     {
         int s {0};
         for (const auto& pair : model->named_parameters())
@@ -33,7 +33,7 @@ namespace
 
 GANImpl::Params::Params(
     int                             start_channels,
-    const std::vector<int64_t>&     before_flatten_shape,
+    const std::vector<int64_t>&     flatten_shape,
     const std::vector<int>&         conv_filters,
     const std::vector<int>&         kernel_size,
     const std::vector<int>&         strides,
@@ -43,8 +43,8 @@ GANImpl::Params::Params(
     const double&                   learning_rate
 )
     : start_channels_{start_channels}
-    , before_flatten_shape_{before_flatten_shape}
-    , flatten_size_{prod(before_flatten_shape)}
+    , flatten_shape_{flatten_shape}
+    , flatten_size_{prod(flatten_shape)}
     , conv_filters_{conv_filters}
     , kernel_size_{kernel_size}
     , strides_{strides}
@@ -52,7 +52,7 @@ GANImpl::Params::Params(
     , activation_{activation}
     , dropout_rate_{dropout_rate}
     , learning_rate_{learning_rate}
-    , n_layers_{conv_filters.size()}
+    , n_layers_{static_cast<int64_t>(conv_filters.size())}
 {
 
 }
@@ -60,7 +60,6 @@ GANImpl::Params::Params(
 GANImpl::GANImpl(
     const Params&           discriminator_params,
     const Params&           generator_params,
-    const std::vector<int>& generator_initial_dense_layer_size,
     const std::vector<int>& generator_upsample,
     const std::string&      optimizer,
     int                     z_dim,
@@ -68,11 +67,13 @@ GANImpl::GANImpl(
 )
     : discriminator_params_{discriminator_params}
     , generator_params_{generator_params}
-    , generator_initial_dense_layer_size_{generator_initial_dense_layer_size}
     , generator_upsample_{generator_upsample}
     , optimizer_{optimizer}
     , z_dim_{z_dim}
     , device_{device} 
+    , discriminator_{nullptr}
+    , generator_{nullptr}
+    , adversarial_{nullptr}
 {
     build();
 }
@@ -82,7 +83,9 @@ void GANImpl::build()
     discriminator_ = build_discriminator();
     register_module("discriminator", discriminator_);
 
-    build_generator();
+    generator_ = build_generator();
+    register_module("generator", generator_);
+    
     build_adversarial();
 }
 
@@ -99,13 +102,27 @@ namespace
             return torch::nn::Functional(torch::relu);
         }
     }
+
+    template<typename T>
+    inline void initial_weights(T& m)
+    {
+        torch::nn::init::normal_(m->weight, 0, 0.02);
+        torch::nn::init::zeros_(m->bias);
+    }
+
+    namespace my
+    {
+        inline torch::Tensor flatten(const torch::Tensor& t, int64_t start_dim, int64_t end_dim)
+        {
+            return torch::flatten(t, start_dim, end_dim);
+        }
+    }
 }
 
 torch::nn::Sequential GANImpl::build_discriminator()
 {
     torch::nn::Sequential discriminator {};
     auto in_channels = discriminator_params_.start_channels_;
-    //auto out_channels = 0;
     for (auto i = 0; i < discriminator_params_.n_layers_; ++i)
     {
         auto out_channels = discriminator_params_.conv_filters_[i];
@@ -114,8 +131,7 @@ torch::nn::Sequential GANImpl::build_discriminator()
                 .stride(discriminator_params_.strides_[i])
                 .padding(2)
         );
-        torch::nn::init::normal_(c->weight, 0, 0.2);
-        torch::nn::init::zeros_(c->bias);
+        initial_weights(c);
         discriminator->push_back("conv2d_" + std::to_string(i), std::move(c));
         
         if (discriminator_params_.batch_norm_momentum_ && i > 0)
@@ -134,11 +150,10 @@ torch::nn::Sequential GANImpl::build_discriminator()
         in_channels = out_channels;
     }
     
-    discriminator->push_back("flatten", torch::nn::Functional(torch::flatten, 1, -1));
+    discriminator->push_back("flatten", torch::nn::Functional(my::flatten, 1, -1));
     
     auto l = torch::nn::Linear(discriminator_params_.flatten_size_, 1);
-    torch::nn::init::normal_(l->weight, 0, 0.2);
-    torch::nn::init::zeros_(l->bias);
+    initial_weights(l);
     discriminator->push_back("linear", std::move(l));
     
     discriminator->push_back("sigmoid", torch::nn::Functional(torch::sigmoid));
@@ -146,8 +161,75 @@ torch::nn::Sequential GANImpl::build_discriminator()
     return discriminator;
 }
 
-void GANImpl::build_generator()
+namespace
 {
+    inline torch::Tensor reshape(torch::Tensor x, torch::IntArrayRef shape)
+    {
+        const auto s = x.sizes(); // batch size
+        return x.reshape({s[0], shape[0], shape[1], shape[2]});
+    }
+}
+
+torch::nn::Sequential GANImpl::build_generator()
+{
+    torch::nn::Sequential generator {};
+    
+    auto l = torch::nn::Linear(z_dim_, generator_params_.flatten_size_);
+    initial_weights(l);
+    generator->push_back("linear", std::move(l));
+
+    if (generator_params_.batch_norm_momentum_)
+    {
+        auto b = torch::nn::BatchNorm(
+            torch::nn::BatchNormOptions(generator_params_.flatten_size_).momentum(generator_params_.batch_norm_momentum_.value())
+        );
+        generator->push_back("batch_norm", std::move(b));
+    }
+
+    generator->push_back("activation", get_activation(generator_params_.activation_));
+
+    generator->push_back(
+        "flatten",
+        torch::nn::Functional(reshape, generator_params_.flatten_shape_)
+    );
+    
+    if (generator_params_.dropout_rate_)
+    {
+        generator->push_back("dropout", torch::nn::Dropout(generator_params_.dropout_rate_.value()));
+    }
+
+    auto in_channels = generator_params_.flatten_shape_[0];
+    for (auto i = 0; i < generator_params_.n_layers_; ++i)
+    {
+        auto out_channels = generator_params_.conv_filters_[i];
+        if (generator_upsample_[i] == 2)
+        {
+            //auto u = torch::nn::UpsampleOptions {};
+            //auto out_channels = discriminator_params_.conv_filters_[i];
+            //auto c = torch::nn::Conv2d(
+            //    torch::nn::Conv2dOptions(in_channels, out_channels, discriminator_params_.kernel_size_[i])
+            //        .stride(discriminator_params_.strides_[i])
+            //        .padding(2)
+            //);
+            //initial_weights(c);
+            //discriminator->push_back("conv2d_" + std::to_string(i), std::move(c));
+ 
+        }
+        else 
+        {
+            auto c = torch::nn::Conv2d(
+                torch::nn::Conv2dOptions(in_channels, out_channels, generator_params_.kernel_size_[i])
+                    .stride(generator_params_.strides_[i])
+                    .padding(2)
+                    //.output_padding(0)
+                    //.transposed(true)
+            );
+            initial_weights(c);
+            generator->push_back("transposed_conv2d_" + std::to_string(i), std::move(c));
+        }
+    }
+    
+    return generator;
 }
 
 void GANImpl::build_adversarial()
@@ -166,7 +248,7 @@ namespace
     {
         GANImpl::Params discriminator_params {
             1, // start_channels
-            {128, 4, 4},
+            {128, 4, 4}, // flatten_shape
             {64, 64, 128, 128}, // conv_filters
             {5, 5, 5, 5}, // kernel_size
             {2, 2, 2, 1}, // strides             
@@ -179,7 +261,7 @@ namespace
         GANImpl::Params generator_params {
             1, // start_channels
             {128, 64, 64, 1}, // conv_filters
-            {128, 4, 4}, // dummy
+            {64, 7, 7}, // flatten_shape 
             {5, 5, 5, 5}, // kernel_size
             {1, 1, 1, 1}, // strides             
             0.9, // batch_norm_momentum
@@ -191,7 +273,6 @@ namespace
         GAN gan {
             discriminator_params,
             generator_params,
-            std::vector<int>{7, 7, 64}, // generator_initial_dense_layer_size
             std::vector<int>{2, 2, 1, 1}, // generator_upsample,
             "rmsprop", // optimizer,
             100, // z_dim,
@@ -210,7 +291,51 @@ namespace
         //{
         //    std::cout << d->ptr(i)->name() << std::endl;
         //}
-        //print_parameters(gan);
+        //print_parameters(d);
+    }
+
+    void test_1()
+    {
+        GANImpl::Params discriminator_params {
+            1, // start_channels
+            {128, 4, 4}, // flatten_shape
+            {64, 64, 128, 128}, // conv_filters
+            {5, 5, 5, 5}, // kernel_size
+            {2, 2, 2, 1}, // strides             
+            boost::none, // batch_norm_momentum
+            "relu", // activation          
+            0.4, // dropout_rate       
+            0.0008 // learning_rate  
+        };
+
+        GANImpl::Params generator_params {
+            1, // start_channels
+            {64, 7, 7}, // flatten_shape 
+            {128, 64, 64, 1}, // conv_filters
+            {5, 5, 5, 5}, // kernel_size
+            {1, 1, 1, 1}, // strides             
+            0.9, // batch_norm_momentum
+            "relu", // activation          
+            boost::none, // dropout_rate       
+            0.0004 // learning_rate  
+        };
+
+        GAN gan {
+            discriminator_params,
+            generator_params,
+            std::vector<int>{2, 2, 1, 1}, // generator_upsample,
+            "rmsprop", // optimizer,
+            100, // z_dim,
+            torch::kCPU
+        };
+
+        auto& g = gan->get_generator();
+        auto batch_size = 10;
+        auto z_dim = 100;
+        auto x = torch::ones({batch_size, z_dim});
+        auto y = g->forward(x);
+
+        //print_parameters(g);
     }
 }
 
@@ -218,6 +343,7 @@ BOOST_AUTO_TEST_CASE(TEST_GAN)
 {
     std::cout << "GAN\n";
     test_0();
+    test_1();
 }
 
 #endif // UNIT_TEST_GAN
