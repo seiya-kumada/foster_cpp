@@ -11,7 +11,7 @@ add_executable(${PROJ_NAME}
 
 find_package(OpenCV REQUIRED)
 find_package(Torch REQUIRED)
-find_package(Boost REQUIRED COMPONENTS unit_test_framework filesystem program_options)
+find_package(Boost 1.71.0 REQUIRED COMPONENTS filesystem program_options unit_test_framework)
 
 target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
@@ -32,15 +32,17 @@ set(INCLUDE_DIRS
 )
 
 set(LIBRARIES
-    ${OpenCV_LIBRARIES}
     ${TORCH_LIBRARIES}
     ${Boost_LIBRARIES}
+    ${OpenCV_LIBRARIES}
 )
+
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX14_ABI=0")
 
 include_directories(${INCLUDE_DIRS})
 target_link_libraries (${PROJ_NAME} ${LIBRARIES})
 
-set_property(TARGET ${PROJ_NAME} PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${PROJ_NAME} PROPERTY CXX_STANDARD 14)
 message(STATUS ${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
 message(STATUS ${Boost_LIBRARY_DIRS})

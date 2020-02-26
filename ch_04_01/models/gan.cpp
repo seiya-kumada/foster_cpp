@@ -2,24 +2,24 @@
 
 namespace
 {
-    void print_parameters(const torch::nn::Sequential& model)
-    {
-        int s {0};
-        for (const auto& pair : model->named_parameters())
-        {
-            const auto& key = pair.key();
-            const auto& value = pair.value();
-            //std::cout << ": " << value.sizes() << std::endl;
-            auto c = 1;
-            for (const auto& v : value.sizes())
-            {
-                c *= v; 
-            }
-            std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
-            s += c;
-        }
-        std::cout << "total number of parameters: " << s << std::endl;
-    }
+    //void print_parameters(const torch::nn::Sequential& model)
+    //{
+    //    int s {0};
+    //    for (const auto& pair : model->named_parameters())
+    //    {
+    //        const auto& key = pair.key();
+    //        const auto& value = pair.value();
+    //        //std::cout << ": " << value.sizes() << std::endl;
+    //        auto c = 1;
+    //        for (const auto& v : value.sizes())
+    //        {
+    //            c *= v; 
+    //        }
+    //        std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
+    //        s += c;
+    //    }
+    //    std::cout << "total number of parameters: " << s << std::endl;
+    //}
 
     inline int64_t prod(const std::vector<int64_t>& s)
     {
