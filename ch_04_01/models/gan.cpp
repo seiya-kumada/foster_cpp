@@ -2,24 +2,24 @@
 
 namespace
 {
-    //void print_parameters(const torch::nn::Sequential& model)
-    //{
-    //    int s {0};
-    //    for (const auto& pair : model->named_parameters())
-    //    {
-    //        const auto& key = pair.key();
-    //        const auto& value = pair.value();
-    //        //std::cout << ": " << value.sizes() << std::endl;
-    //        auto c = 1;
-    //        for (const auto& v : value.sizes())
-    //        {
-    //            c *= v; 
-    //        }
-    //        std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
-    //        s += c;
-    //    }
-    //    std::cout << "total number of parameters: " << s << std::endl;
-    //}
+    void print_parameters(const torch::nn::Sequential& model)
+    {
+        int s {0};
+        for (const auto& pair : model->named_parameters())
+        {
+            const auto& key = pair.key();
+            const auto& value = pair.value();
+            //std::cout << ": " << value.sizes() << std::endl;
+            auto c = 1;
+            for (const auto& v : value.sizes())
+            {
+                c *= v; 
+            }
+            std::cout << key << ": " << pair.value().sizes() << " -> " << c << std::endl;
+            s += c;
+        }
+        std::cout << "total number of parameters: " << s << std::endl;
+    }
 
     inline int64_t prod(const std::vector<int64_t>& s)
     {
@@ -132,20 +132,20 @@ torch::nn::Sequential GANImpl::build_discriminator()
                 .padding(2)
         );
         initial_weights(c);
-        discriminator->push_back("conv2d_" + std::to_string(i), std::move(c));
+        discriminator->push_back("Conv2d_" + std::to_string(i), std::move(c));
         
         if (discriminator_params_.batch_norm_momentum_ && i > 0)
         {
-            auto b = torch::nn::BatchNorm(
-                torch::nn::BatchNormOptions(out_channels).momentum(discriminator_params_.batch_norm_momentum_.value())
+            auto b = torch::nn::BatchNorm2d(
+                torch::nn::BatchNorm2dOptions(out_channels).momentum(discriminator_params_.batch_norm_momentum_.value())
             );
-            discriminator->push_back("batch_norm_" + std::to_string(i), std::move(b));
+            discriminator->push_back("BatchNorm2d_" + std::to_string(i), std::move(b));
         }
         discriminator->push_back("activation_" + std::to_string(i), get_activation(discriminator_params_.activation_));
 
         if (discriminator_params_.dropout_rate_)
         {
-            discriminator->push_back("dropout_" + std::to_string(i), torch::nn::Dropout(discriminator_params_.dropout_rate_.value()));
+            discriminator->push_back("Dropout_" + std::to_string(i), torch::nn::Dropout(discriminator_params_.dropout_rate_.value()));
         }
         in_channels = out_channels;
     }
@@ -154,7 +154,7 @@ torch::nn::Sequential GANImpl::build_discriminator()
     
     auto l = torch::nn::Linear(discriminator_params_.flatten_size_, 1);
     initial_weights(l);
-    discriminator->push_back("linear", std::move(l));
+    discriminator->push_back("Linear", std::move(l));
     
     discriminator->push_back("sigmoid", torch::nn::Functional(torch::sigmoid));
 
@@ -176,26 +176,23 @@ torch::nn::Sequential GANImpl::build_generator()
     
     auto l = torch::nn::Linear(z_dim_, generator_params_.flatten_size_);
     initial_weights(l);
-    generator->push_back("linear", std::move(l));
+    generator->push_back("Linear", std::move(l));
 
     if (generator_params_.batch_norm_momentum_)
     {
-        auto b = torch::nn::BatchNorm(
-            torch::nn::BatchNormOptions(generator_params_.flatten_size_).momentum(generator_params_.batch_norm_momentum_.value())
+        auto b = torch::nn::BatchNorm2d(
+            torch::nn::BatchNorm2dOptions(generator_params_.flatten_size_).momentum(generator_params_.batch_norm_momentum_.value())
         );
-        generator->push_back("batch_norm", std::move(b));
+        generator->push_back("BatchNorm2d", std::move(b));
     }
 
     generator->push_back("activation", get_activation(generator_params_.activation_));
 
-    generator->push_back(
-        "flatten",
-        torch::nn::Functional(reshape, generator_params_.flatten_shape_)
-    );
+    generator->push_back("flatten", torch::nn::Functional(reshape, generator_params_.flatten_shape_));
     
     if (generator_params_.dropout_rate_)
     {
-        generator->push_back("dropout", torch::nn::Dropout(generator_params_.dropout_rate_.value()));
+        generator->push_back("Dropout", torch::nn::Dropout(generator_params_.dropout_rate_.value()));
     }
 
     auto in_channels = generator_params_.flatten_shape_[0];
@@ -204,29 +201,49 @@ torch::nn::Sequential GANImpl::build_generator()
         auto out_channels = generator_params_.conv_filters_[i];
         if (generator_upsample_[i] == 2)
         {
-            //auto u = torch::nn::UpsampleOptions {};
-            //auto out_channels = discriminator_params_.conv_filters_[i];
-            //auto c = torch::nn::Conv2d(
-            //    torch::nn::Conv2dOptions(in_channels, out_channels, discriminator_params_.kernel_size_[i])
-            //        .stride(discriminator_params_.strides_[i])
-            //        .padding(2)
-            //);
-            //initial_weights(c);
-            //discriminator->push_back("conv2d_" + std::to_string(i), std::move(c));
- 
-        }
-        else 
-        {
+            auto u = torch::nn::Upsample(
+                torch::nn::UpsampleOptions().scale_factor({2, 2})
+            );
+            generator->push_back("Upsample_" + std::to_string(i), std::move(u));
+            
+            auto out_channels = generator_params_.conv_filters_[i];
             auto c = torch::nn::Conv2d(
                 torch::nn::Conv2dOptions(in_channels, out_channels, generator_params_.kernel_size_[i])
                     .stride(generator_params_.strides_[i])
                     .padding(2)
-                    //.output_padding(0)
-                    //.transposed(true)
             );
             initial_weights(c);
-            generator->push_back("transposed_conv2d_" + std::to_string(i), std::move(c));
+            generator->push_back("Conv2d_" + std::to_string(i), std::move(c));
+ 
         }
+        else 
+        {
+            auto c = torch::nn::ConvTranspose2d(
+                torch::nn::ConvTranspose2dOptions(in_channels, out_channels, generator_params_.kernel_size_[i])
+                    .stride(generator_params_.strides_[i])
+                    .padding(2)
+                    //.output_padding(0)
+            );
+            initial_weights(c);
+            generator->push_back("ConvTranspose2d_" + std::to_string(i), std::move(c));
+        }
+
+        if (i < generator_params_.n_layers_ - 1)
+        {
+            if (generator_params_.batch_norm_momentum_)
+            {
+                auto b = torch::nn::BatchNorm2d(
+                    torch::nn::BatchNorm2dOptions(out_channels).momentum(generator_params_.batch_norm_momentum_.value())
+                );
+                generator->push_back("BatchNorm2d_" + std::to_string(i), std::move(b));               
+                generator->push_back("activation_" + std::to_string(i), get_activation(generator_params_.activation_));
+            }
+            else
+            {
+                generator->push_back("tanh_" + std::to_string(i), torch::nn::Functional(torch::tanh));
+            }
+        }
+        in_channels = out_channels;
     }
     
     return generator;
@@ -287,11 +304,11 @@ namespace
         auto x = torch::ones({batch_size, channels, rows, cols});
         auto y = d->forward(x);
         BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, 1})); 
-        //for (auto i = 0; i < d->size(); ++i)
-        //{
-        //    std::cout << d->ptr(i)->name() << std::endl;
-        //}
-        //print_parameters(d);
+        for (std::size_t i = 0; i < d->size(); ++i)
+        {
+            std::cout << d->ptr(i)->name() << std::endl;
+        }
+        print_parameters(d);
     }
 
     void test_1()
@@ -333,16 +350,16 @@ namespace
         auto batch_size = 10;
         auto z_dim = 100;
         auto x = torch::ones({batch_size, z_dim});
-        auto y = g->forward(x);
+        //auto y = g->forward(x);
 
-        //print_parameters(g);
+        print_parameters(g);
     }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_GAN)
 {
     std::cout << "GAN\n";
-    test_0();
+    //test_0();
     test_1();
 }
 
