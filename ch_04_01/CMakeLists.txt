@@ -11,12 +11,12 @@ add_executable(${PROJ_NAME}
 
 find_package(OpenCV REQUIRED)
 find_package(Torch REQUIRED)
-find_package(Boost 1.71.0 REQUIRED COMPONENTS filesystem program_options unit_test_framework)
+find_package(Boost 1.71.0 COMPONENTS numpy36 python36 filesystem program_options unit_test_framework REQUIRED)
 
 target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
-    UNIT_TEST=1
-    UNIT_TEST_GAN=1
+    UNIT_TEST=0
+    UNIT_TEST_GAN=0
     #UNIT_TEST_make_attribute_vectors=0
 )
 
@@ -26,6 +26,7 @@ set(INCLUDE_DIRS
     ${Boost_INCLUDE_DIRS}
     ./
     ./models
+    /home/ubuntu/anaconda3/include/python3.6m/
     #/usr/local/cpplinq/CppLinq/
     #../ch_03_03/
     #../ch_03_05/

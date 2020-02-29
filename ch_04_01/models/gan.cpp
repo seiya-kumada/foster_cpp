@@ -1,8 +1,10 @@
 #include "gan.h"
+#include <boost/python/numpy.hpp>
 
 namespace
 {
-    void print_parameters(const torch::nn::Sequential& model)
+    template<typename T>
+    void print_parameters(const T& model) // torch::nn::Sequential& model)
     {
         int s {0};
         for (const auto& pair : model->named_parameters())
@@ -180,7 +182,7 @@ torch::nn::Sequential GANImpl::build_generator()
 
     if (generator_params_.batch_norm_momentum_)
     {
-        auto b = torch::nn::BatchNorm2d(
+        auto b = torch::nn::BatchNorm1d(
             torch::nn::BatchNorm2dOptions(generator_params_.flatten_size_).momentum(generator_params_.batch_norm_momentum_.value())
         );
         generator->push_back("BatchNorm2d", std::move(b));
@@ -222,7 +224,6 @@ torch::nn::Sequential GANImpl::build_generator()
                 torch::nn::ConvTranspose2dOptions(in_channels, out_channels, generator_params_.kernel_size_[i])
                     .stride(generator_params_.strides_[i])
                     .padding(2)
-                    //.output_padding(0)
             );
             initial_weights(c);
             generator->push_back("ConvTranspose2d_" + std::to_string(i), std::move(c));
@@ -245,7 +246,6 @@ torch::nn::Sequential GANImpl::build_generator()
         }
         in_channels = out_channels;
     }
-    
     return generator;
 }
 
@@ -255,6 +255,7 @@ void GANImpl::build_adversarial()
 
 #if(UNIT_TEST_GAN)
 #include <boost/test/unit_test.hpp>
+//#include <boost/python/numpy.hpp>
 
 namespace
 {
@@ -304,11 +305,11 @@ namespace
         auto x = torch::ones({batch_size, channels, rows, cols});
         auto y = d->forward(x);
         BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, 1})); 
-        for (std::size_t i = 0; i < d->size(); ++i)
-        {
-            std::cout << d->ptr(i)->name() << std::endl;
-        }
-        print_parameters(d);
+        //for (std::size_t i = 0; i < d->size(); ++i)
+        //{
+        //    std::cout << d->ptr(i)->name() << std::endl;
+        //}
+        //print_parameters(d);
     }
 
     void test_1()
@@ -350,17 +351,23 @@ namespace
         auto batch_size = 10;
         auto z_dim = 100;
         auto x = torch::ones({batch_size, z_dim});
-        //auto y = g->forward(x);
+        auto y = g->forward(x);
+        BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, 1, 28, 28})); 
+        //print_parameters(gan);
+    }
 
-        print_parameters(g);
+    void test_2()
+    {
+
     }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_GAN)
 {
     std::cout << "GAN\n";
-    //test_0();
+    test_0();
     test_1();
+    test_2();
 }
 
 #endif // UNIT_TEST_GAN
