@@ -3,6 +3,7 @@ set(PROJ_NAME ch_04_01)
 add_executable(${PROJ_NAME} 
     ./main.cpp
     ./models/gan.cpp
+    ./dataset/custom_dataset.cpp
     #./add_attribute_vectors.cpp
     #../ch_03_05/custom_dataset.cpp
     #./custom_dataset_from_csv.cpp
@@ -11,13 +12,13 @@ add_executable(${PROJ_NAME}
 
 find_package(OpenCV REQUIRED)
 find_package(Torch REQUIRED)
-find_package(Boost 1.71.0 COMPONENTS numpy36 python36 filesystem program_options unit_test_framework REQUIRED)
+find_package(Boost 1.71.0 COMPONENTS filesystem program_options unit_test_framework REQUIRED)
 
 target_compile_definitions(
     ${PROJ_NAME} PRIVATE 
-    UNIT_TEST=0
-    UNIT_TEST_GAN=0
-    #UNIT_TEST_make_attribute_vectors=0
+    UNIT_TEST=1
+    UNIT_TEST_GAN=1
+    UNIT_TEST_CustomDataset=1
 )
 
 set(INCLUDE_DIRS
@@ -26,7 +27,8 @@ set(INCLUDE_DIRS
     ${Boost_INCLUDE_DIRS}
     ./
     ./models
-    /home/ubuntu/anaconda3/include/python3.6m/
+    ./dataset
+    /usr/local/libnpy
     #/usr/local/cpplinq/CppLinq/
     #../ch_03_03/
     #../ch_03_05/
@@ -38,7 +40,6 @@ set(LIBRARIES
     ${OpenCV_LIBRARIES}
 )
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX14_ABI=0")
 
 include_directories(${INCLUDE_DIRS})
 target_link_libraries (${PROJ_NAME} ${LIBRARIES})

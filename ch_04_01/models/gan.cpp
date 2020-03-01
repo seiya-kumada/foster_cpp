@@ -1,5 +1,5 @@
 #include "gan.h"
-#include <boost/python/numpy.hpp>
+#include <npy.hpp>
 
 namespace
 {
@@ -63,16 +63,12 @@ GANImpl::GANImpl(
     const Params&           discriminator_params,
     const Params&           generator_params,
     const std::vector<int>& generator_upsample,
-    const std::string&      optimizer,
-    int                     z_dim,
-    const torch::Device&    device
+    int                     z_dim
 )
     : discriminator_params_{discriminator_params}
     , generator_params_{generator_params}
     , generator_upsample_{generator_upsample}
-    , optimizer_{optimizer}
     , z_dim_{z_dim}
-    , device_{device} 
     , discriminator_{nullptr}
     , generator_{nullptr}
     , adversarial_{nullptr}
@@ -255,7 +251,6 @@ void GANImpl::build_adversarial()
 
 #if(UNIT_TEST_GAN)
 #include <boost/test/unit_test.hpp>
-//#include <boost/python/numpy.hpp>
 
 namespace
 {
@@ -292,9 +287,7 @@ namespace
             discriminator_params,
             generator_params,
             std::vector<int>{2, 2, 1, 1}, // generator_upsample,
-            "rmsprop", // optimizer,
-            100, // z_dim,
-            torch::kCPU
+            100 // z_dim,
         };
 
         auto& d = gan->get_discriminator();
@@ -342,9 +335,7 @@ namespace
             discriminator_params,
             generator_params,
             std::vector<int>{2, 2, 1, 1}, // generator_upsample,
-            "rmsprop", // optimizer,
-            100, // z_dim,
-            torch::kCPU
+            100 // z_dim,
         };
 
         auto& g = gan->get_generator();
@@ -355,11 +346,6 @@ namespace
         BOOST_CHECK_EQUAL(y.sizes(), (std::vector<int64_t>{batch_size, 1, 28, 28})); 
         //print_parameters(gan);
     }
-
-    void test_2()
-    {
-
-    }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_GAN)
@@ -367,7 +353,6 @@ BOOST_AUTO_TEST_CASE(TEST_GAN)
     std::cout << "GAN\n";
     test_0();
     test_1();
-    test_2();
 }
 
 #endif // UNIT_TEST_GAN

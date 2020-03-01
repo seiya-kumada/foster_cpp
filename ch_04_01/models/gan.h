@@ -37,9 +37,7 @@ public:
         const Params&           discriminator_params,
         const Params&           generator_params,
         const std::vector<int>& generator_upsample,
-        const std::string&      optimizer,
-        int                     z_dim,
-        const torch::Device&    device
+        int                     z_dim
     );
 
     const torch::nn::Sequential& get_discriminator() const { return discriminator_; }
@@ -55,9 +53,7 @@ private:
     Params              discriminator_params_;
     Params              generator_params_;
     std::vector<int>    generator_upsample_;
-    std::string         optimizer_;
     int                 z_dim_;
-    torch::Device       device_;
 
     torch::nn::Sequential   discriminator_;
     torch::nn::Sequential   generator_;
