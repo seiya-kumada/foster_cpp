@@ -45,9 +45,6 @@ public:
 
     const torch::nn::Sequential& get_generator() const { return generator_; }
     torch::nn::Sequential& get_generator() { return generator_; }
-    
-    const torch::nn::Sequential& get_adversarial() const { return adversarial_; }
-    torch::nn::Sequential& get_adversarial() { return adversarial_; }
 
 private:
     Params              discriminator_params_;
@@ -57,7 +54,6 @@ private:
 
     torch::nn::Sequential   discriminator_;
     torch::nn::Sequential   generator_;
-    torch::nn::Sequential   adversarial_;
 
     void build();
     torch::nn::Sequential build_discriminator();

@@ -71,7 +71,6 @@ GANImpl::GANImpl(
     , z_dim_{z_dim}
     , discriminator_{nullptr}
     , generator_{nullptr}
-    , adversarial_{nullptr}
 {
     build();
 }
