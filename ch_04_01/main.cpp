@@ -19,26 +19,37 @@ namespace
         }
     }
 
-    void train_discriminator(const torch::Tensor& data, GAN& gan)
+    void train_discriminator(
+        const torch::Tensor& data, 
+        GAN& gan,
+        std::unique_ptr<torch::optim::Optimizer>& optimizer_for_dis,
+        const torch::Tensor& real_labels,
+        const torch::Tensor& fake_labels)
     {
         gan->get_discriminator()->train();
-        gan->get_discriminator()->forward(data);
+        optimizer_for_dis->zero_grad();
+        auto pred_labels = gan->get_discriminator()->forward(data);
+        auto loss = torch::binary_cross_entropy(real_labels, pred_labels); 
+        loss.backward();
+        optimizer_for_dis->step();
     }
 
     template<typename Loader>
     void train(
         int epoch, 
         GAN& gan, 
+        const torch::Tensor& real,
+        const torch::Tensor& fake,
         const torch::Device& device, 
         Loader& loader, 
-        std::unique_ptr<torch::optim::Optimizer>& opt_for_dis,
-        std::unique_ptr<torch::optim::Optimizer>& opt_for_gen,
+        std::unique_ptr<torch::optim::Optimizer>& optimizer_for_dis,
+        std::unique_ptr<torch::optim::Optimizer>& optimizer_for_gen,
         std::size_t dataset_size)
     {
         for (auto& batch : loader)
         {
             auto data = batch.data.to(device);
-            train_discriminator(data, gan);
+            train_discriminator(data, gan, optimizer_for_dis, real, fake);
             break;
         }
     }
@@ -128,7 +139,9 @@ namespace
         int epoch = 1;
         torch::Device device {torch::kCUDA};
         gan->to(device);
-        train(epoch, gan, device, *loader, optimizer_for_discriminator, optimizer_for_generator, dataset_size);
+        auto real = torch::ones({BATCH_SIZE, 1});
+        auto fake = torch::zeros({BATCH_SIZE, 1});
+        train(epoch, gan, real, fake, device, *loader, optimizer_for_discriminator, optimizer_for_generator, dataset_size);
     }
 }
 
