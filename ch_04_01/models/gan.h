@@ -45,6 +45,7 @@ public:
 
     const torch::nn::Sequential& get_generator() const { return generator_; }
     torch::nn::Sequential& get_generator() { return generator_; }
+    int get_z_dim() const { return z_dim_; }
 
 private:
     Params              discriminator_params_;
