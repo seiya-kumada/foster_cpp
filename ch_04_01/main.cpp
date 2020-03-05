@@ -3,6 +3,7 @@
 // https://github.com/pytorch/examples/blob/master/cpp/dcgan/dcgan.cpp
 namespace
 {
+    // TODO: ココ書き換えろ。
     std::unique_ptr<torch::optim::Optimizer> select_optimizer(const std::string& name, GAN& gan, double learning_rate)
     {
         if (name == "adam")
@@ -19,7 +20,7 @@ namespace
         }
     }
 
-    void train_discriminator(
+    std::tuple<float, float>  train_discriminator(
         const torch::Tensor& real_image, 
         GAN& gan,
         const torch::Device& device,
@@ -27,7 +28,6 @@ namespace
         const torch::Tensor& real_labels,
         const torch::Tensor& fake_labels)
     {
-        gan->get_discriminator()->train();
         optimizer_for_discriminator->zero_grad();
         
         // consider real image
@@ -43,10 +43,27 @@ namespace
         auto fake_loss = torch::binary_cross_entropy(fake_output, fake_labels); 
         fake_loss.backward();
 
-        auto loss = real_loss + fake_loss;
-        //loss.backward(); それともこう書くべきか？
-        //個々に最小にするか、和を最小にするか？の違い。
         optimizer_for_discriminator->step();
+
+        return std::make_tuple(real_loss.template item<float>(), fake_loss.template item<float>());
+    }
+
+    float train_generator(
+        const torch::Tensor& real_image, 
+        GAN& gan,
+        const torch::Device& device,
+        std::unique_ptr<torch::optim::Optimizer>& optimizer_for_generator,
+        const torch::Tensor& real_labels,
+        const torch::Tensor& fake_labels)
+    {
+        optimizer_for_generator->zero_grad();
+        auto noise = torch::randn({real_image.size(0), gan->get_z_dim()}, device);
+        auto fake_image = gan->get_generator()->forward(noise);
+        auto fake_output = gan->get_discriminator()->forward(fake_image);
+        auto g_loss = torch::binary_cross_entropy(fake_output, real_labels); 
+        g_loss.backward();
+        optimizer_for_generator->step();
+        return g_loss.template item<float>();
     }
 
     template<typename Loader>
@@ -58,14 +75,38 @@ namespace
         const torch::Tensor& fake_labels,
         Loader& loader, 
         std::unique_ptr<torch::optim::Optimizer>& optimizer_for_dis,
-        std::unique_ptr<torch::optim::Optimizer>& optimizer_for_gen,
-        std::size_t dataset_size)
+        std::unique_ptr<torch::optim::Optimizer>& optimizer_for_gen)
     {
+        float d_real_loss {};
+        float d_fake_loss {};
+        float g_loss {};
         for (auto& batch : loader)
         {
             auto data = batch.data.to(device);
-            train_discriminator(data, gan, device, optimizer_for_dis, real_labels, fake_labels);
+            std::tie(d_real_loss, d_fake_loss) = train_discriminator(data, gan, device, optimizer_for_dis, real_labels, fake_labels);
+            g_loss = train_generator(data, gan, device, optimizer_for_gen, real_labels, fake_labels);
+            std::cout << d_real_loss << " " << d_fake_loss << " " << g_loss << std::endl;
             break;
+        }
+    }
+
+    template<typename Loader>
+    void train(Loader& loader, GAN& gan, int epochs)
+    {
+        auto optimizer_for_discriminator = select_optimizer("rmsprop", gan, gan->get_discriminator_params().learning_rate_);
+        auto optimizer_for_generator = select_optimizer("rmsprop", gan, gan->get_generator_params().learning_rate_);
+
+        for (auto epoch = 1; epoch <= epochs; ++epoch)
+        {
+            torch::Device device {torch::kCUDA};
+            gan->to(device);
+            gan->train();
+            //gan->get_generator()->train();
+            //gan->get_discriminator()->train();
+            auto batch_size = static_cast<int64_t>(loader->options().batch_size);
+            auto real_labels = torch::ones({batch_size, 1}).to(device);
+            auto fake_labels = torch::zeros({batch_size, 1}).to(device);
+            train(epoch, gan, device, real_labels, fake_labels, *loader, optimizer_for_discriminator, optimizer_for_generator);
         }
     }
 }
@@ -149,15 +190,11 @@ namespace
             std::move(dataset),
             torch::data::DataLoaderOptions().batch_size(BATCH_SIZE).workers(2));
 
-        auto optimizer_for_discriminator = select_optimizer("rmsprop", gan, discriminator_params.learning_rate_);
-        auto optimizer_for_generator = select_optimizer("rmsprop", gan, generator_params.learning_rate_);
-        int epoch = 1;
-        torch::Device device {torch::kCUDA};
-        gan->to(device);
-        auto real_labels = torch::ones({BATCH_SIZE, 1}).to(device);
-        auto fake_labels = torch::zeros({BATCH_SIZE, 1}).to(device);
-        train(epoch, gan, device, real_labels, fake_labels, *loader, optimizer_for_discriminator, optimizer_for_generator, dataset_size);
+        int EPOCHS = 1;
+        train(loader, gan, EPOCHS);
     }
+
+    
 }
 
 BOOST_AUTO_TEST_CASE(TEST_main)
