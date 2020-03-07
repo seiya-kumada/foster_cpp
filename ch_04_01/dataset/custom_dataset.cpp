@@ -7,10 +7,11 @@ namespace
 {
 }
 
-CustomDataset::CustomDataset(const std::string& path)
+CustomDataset::CustomDataset(const std::string& path, int upper_size)
 {
     bool fortran_order {};
     npy::LoadArrayFromNumpy(path, shape_, fortran_order, data_);
+    shape_[0] = upper_size;
 }
 
 torch::data::Example<> CustomDataset::get(std::size_t j)
@@ -47,9 +48,10 @@ namespace
 
     void test_get()
     {
-        CustomDataset dataset {PATH};
+        int upper_size = 121399;
+        CustomDataset dataset {PATH, upper_size};
         auto size = dataset.size();
-        BOOST_CHECK_EQUAL(121399, size.value());
+        BOOST_CHECK_EQUAL(upper_size, size.value());
         torch::Tensor data {};
         torch::Tensor target {};
         auto v = dataset.get(0);

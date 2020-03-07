@@ -17,7 +17,7 @@ private:
  * 3. torch::Tensorに変換する。ラベル部分は空テンソル。
  */
 public:
-    CustomDataset(const std::string& path);
+    CustomDataset(const std::string& path, int upper_size);
 	
     // Override get() function to return tensor at location index
 	torch::data::Example<> get(std::size_t index) override;

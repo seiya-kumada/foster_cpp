@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 set(PROJ_NAME ch_04_01)
 add_executable(${PROJ_NAME} 
     ./main.cpp
+    ./trainer.cpp
     ./models/gan.cpp
     ./dataset/custom_dataset.cpp
     #./add_attribute_vectors.cpp
@@ -19,6 +20,7 @@ target_compile_definitions(
     UNIT_TEST=1
     UNIT_TEST_GAN=1
     UNIT_TEST_CustomDataset=1
+    UNIT_TEST_TRAINER=1
 )
 
 set(INCLUDE_DIRS
