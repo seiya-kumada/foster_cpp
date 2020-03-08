@@ -4,6 +4,8 @@
 #include "gan.h"
 #include <torch/torch.h>
 
+// http://aidiary.hatenablog.com/entry/20180304/1520172429: detachの意味が書いてある。
+
 template<typename Loader>
 class Trainer
 {
@@ -23,8 +25,9 @@ public:
         , log_interval_{log_interval}
         , save_interval_{save_interval}
         , batches_per_epoch_{batches_per_epoch} 
-        , real_labels_{}
-        , fake_labels_{}
+        , batch_size_{static_cast<int64_t>(loader_->options().batch_size)}
+        , real_labels_{torch::ones({batch_size_, 1}).to(device_)}
+        , fake_labels_{torch::zeros({batch_size_, 1}).to(device_)}
         , optimizer_for_discriminator_{
             select_optimizer(
                 "rmsprop", 
@@ -39,9 +42,6 @@ public:
 
     void train()
     {
-        const auto batch_size = static_cast<int64_t>(loader_->options().batch_size);
-        real_labels_ = torch::ones({batch_size, 1}).to(device_);
-        fake_labels_ = torch::zeros({batch_size, 1}).to(device_);
         gan_->to(device_);
         gan_->train();
         //gan->get_generator()->train();
@@ -62,11 +62,12 @@ private:
     int                     log_interval_; 
     int                     save_interval_;
     int                     batches_per_epoch_;
+    int64_t                 batch_size_;
     torch::Tensor           real_labels_;
     torch::Tensor           fake_labels_;
     std::unique_ptr<torch::optim::Optimizer> optimizer_for_discriminator_;
     std::unique_ptr<torch::optim::Optimizer> optimizer_for_generator_;
-
+    
     void train(int epoch)
     {
         float d_real_loss {};
@@ -77,8 +78,8 @@ private:
         {
             const auto data = batch.data.to(device_);
             std::tie(d_real_loss, d_fake_loss) = train_discriminator(data);
-            g_loss = train_generator(data);
-
+            g_loss = train_generator();
+            
             if (batch_index % log_interval_ == 0)
             {
                 std::printf(
@@ -107,13 +108,14 @@ private:
         
         // consider real image
         const auto real_output = gan_->get_discriminator()->forward(real_image);
-        const auto real_loss = torch::binary_cross_entropy(real_output, real_labels_); 
+        const auto real_labels = torch::ones({real_output.size(0), 1}).to(device_);
+        /* real_labels_ cannot be used, because batch size may be changed. */
+        const auto real_loss = torch::binary_cross_entropy(real_output, real_labels); 
         real_loss.backward();
 
         // consider generated image
-        const auto noise = torch::randn({real_image.size(0), gan_->get_z_dim()}, device_);
+        const auto noise = torch::randn({batch_size_, gan_->get_z_dim()}, device_);
         const auto fake_image = gan_->get_generator()->forward(noise);
-        // http://aidiary.hatenablog.com/entry/20180304/1520172429: detachの意味が書いてある。
         const auto fake_output = gan_->get_discriminator()->forward(fake_image.detach());
         const auto fake_loss = torch::binary_cross_entropy(fake_output, fake_labels_); 
         fake_loss.backward();
@@ -124,10 +126,10 @@ private:
         return std::make_tuple(real_loss.template item<float>(), fake_loss.template item<float>());
     }
 
-    float train_generator(const torch::Tensor& real_image)
+    float train_generator()
     {
         optimizer_for_generator_->zero_grad();
-        const auto noise = torch::randn({real_image.size(0), gan_->get_z_dim()}, device_);
+        const auto noise = torch::randn({batch_size_, gan_->get_z_dim()}, device_);
         const auto fake_image = gan_->get_generator()->forward(noise);
         const auto fake_output = gan_->get_discriminator()->forward(fake_image);
         const auto loss = torch::binary_cross_entropy(fake_output, real_labels_); 

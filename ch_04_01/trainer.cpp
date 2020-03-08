@@ -3,6 +3,7 @@
 #include "trainer.h"
 #include "gan.h"
 #include "custom_dataset.h"
+#include <npy.hpp>
 
 namespace
 {
@@ -69,7 +70,7 @@ namespace
 
     void test_2()
     {
-        int UPPER_SIZE = 80000;
+        int UPPER_SIZE = 800;
         auto dataset = CustomDataset {PATH, UPPER_SIZE}
             .map(torch::data::transforms::Normalize<>(127.5, 127.5))
             .map(torch::data::transforms::Stack<>());
@@ -85,7 +86,7 @@ namespace
             std::vector<int>{2, 2, 1, 1}, // generator_upsample,
             Z_DIM,
         };   
-        const int BATCH_SIZE {64};
+        const int BATCH_SIZE {128};
         const int batches_per_epoch = std::ceil(dataset_size / static_cast<double>(BATCH_SIZE));
 
         const auto loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(
@@ -94,20 +95,56 @@ namespace
 
         torch::Device device {torch::kCUDA};
         const int EPOCHS = 1; // 6000
-        const int LOG_INTERVAL = 100;
+        const int LOG_INTERVAL = 1;
         const int SAVE_INTERVAL = 1000;
 
+        //gan->to(device);
+        //int c = 0;
+        //for (const auto& batch : *loader)
+        //{
+        //    const auto data = batch.data.to(device);
+        //    auto y = gan->get_discriminator()->forward(data);
+        //    std::cout << "---\n";
+        //    std::cout << y << std::endl;
+        //    if (c == 10)
+        //    {
+        //        break;
+        //    }
+        //    ++c;
+        //}
         Trainer<decltype(loader)> trainer {loader, gan, EPOCHS, device, LOG_INTERVAL, SAVE_INTERVAL, batches_per_epoch};
         trainer.train();
     }
+
+    void save_as_numpy(torch::Tensor t, const std::string& name)
+    {
+        t = t.detach().permute({1, 2, 0}).to(torch::kFloat); // 28, 28, 1
+        t = t.to(torch::kCPU);
+
+        std::vector<float> dst(28 * 28 * 1);
+        auto begin = static_cast<float*>(t.data_ptr());
+        auto end = begin + (28 * 28 * 1);
+        std::copy(begin, end, std::begin(dst));
+        const uint64_t shape [] = {28, 28, 1};
+        npy::SaveArrayAsNumpy(name, false, 3, shape, dst);
+    }
+
+    void test_3()
+    {
+        torch::Tensor t {};
+        torch::load(t, "./real_image.pt");
+        save_as_numpy(t[10], "./real_image.npy");
+   }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_TRAINER)
 {
     std::cout << "TRAINER\n";
-    test_0();
-    test_1();
+    //test_0();
+    //test_1();
     test_2();
+    //test_3();
+
 }
 
 #endif // UNIT_TEST_TRAINER
