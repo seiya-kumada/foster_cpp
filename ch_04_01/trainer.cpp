@@ -70,6 +70,7 @@ namespace
 
     void test_2()
     {
+        torch::manual_seed(1);
         int UPPER_SIZE = 800;
         auto dataset = CustomDataset {PATH, UPPER_SIZE}
             .map(torch::data::transforms::Normalize<>(127.5, 127.5))
@@ -86,7 +87,7 @@ namespace
             std::vector<int>{2, 2, 1, 1}, // generator_upsample,
             Z_DIM,
         };   
-        const int BATCH_SIZE {128};
+        const int BATCH_SIZE {64};
         const int batches_per_epoch = std::ceil(dataset_size / static_cast<double>(BATCH_SIZE));
 
         const auto loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(
@@ -98,20 +99,6 @@ namespace
         const int LOG_INTERVAL = 1;
         const int SAVE_INTERVAL = 1000;
 
-        //gan->to(device);
-        //int c = 0;
-        //for (const auto& batch : *loader)
-        //{
-        //    const auto data = batch.data.to(device);
-        //    auto y = gan->get_discriminator()->forward(data);
-        //    std::cout << "---\n";
-        //    std::cout << y << std::endl;
-        //    if (c == 10)
-        //    {
-        //        break;
-        //    }
-        //    ++c;
-        //}
         Trainer<decltype(loader)> trainer {loader, gan, EPOCHS, device, LOG_INTERVAL, SAVE_INTERVAL, batches_per_epoch};
         trainer.train();
     }

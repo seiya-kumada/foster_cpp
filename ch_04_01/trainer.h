@@ -3,6 +3,7 @@
 
 #include "gan.h"
 #include <torch/torch.h>
+#include <chrono>
 
 // http://aidiary.hatenablog.com/entry/20180304/1520172429: detachの意味が書いてある。
 
@@ -43,15 +44,18 @@ public:
     void train()
     {
         gan_->to(device_);
-        gan_->train();
-        //gan->get_generator()->train();
-        //gan->get_discriminator()->train();
-       
+        //gan_->train();
+        gan_->get_generator()->train();
+        gan_->get_discriminator()->train();
+        auto s = std::chrono::system_clock::now();       
         // train
         for (auto epoch = 1; epoch <= epochs_; ++epoch)
         {
             train(epoch);
         }
+        auto e = std::chrono::system_clock::now();       
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(e - s).count(); 
+        std::cout << elapsed << "[sec]\n";
     }
 
 private:
