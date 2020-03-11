@@ -114,7 +114,7 @@ private:
         const auto real_output = gan_->get_discriminator()->forward(real_image);
         const auto real_labels = torch::ones({real_output.size(0), 1}).to(device_);
         /* real_labels_ cannot be used, because batch size may be changed. */
-        const auto real_loss = torch::binary_cross_entropy(real_output, real_labels); 
+        const auto real_loss = torch::binary_cross_entropy(real_output, real_labels);
         real_loss.backward();
 
         // consider generated image
