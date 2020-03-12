@@ -82,8 +82,6 @@ void GANImpl::build()
 
     generator_ = build_generator();
     register_module("generator", generator_);
-    
-    build_adversarial();
 }
 
 namespace
@@ -242,10 +240,6 @@ torch::nn::Sequential GANImpl::build_generator()
         in_channels = out_channels;
     }
     return generator;
-}
-
-void GANImpl::build_adversarial()
-{
 }
 
 #if(UNIT_TEST_GAN)

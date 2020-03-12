@@ -71,6 +71,54 @@ namespace
     void test_2()
     {
         torch::manual_seed(1);
+        int UPPER_SIZE = 1000;
+        auto dataset = CustomDataset {PATH, UPPER_SIZE}
+            .map(torch::data::transforms::Normalize<>(127.5, 127.5))
+            .map(torch::data::transforms::Stack<>());
+
+        const size_t dataset_size = dataset.size().value();
+        
+        BOOST_CHECK_EQUAL(UPPER_SIZE, dataset_size);
+
+        const int Z_DIM = 100;
+        GAN gan {
+            discriminator_params,
+            generator_params,
+            std::vector<int>{2, 2, 1, 1}, // generator_upsample,
+            Z_DIM,
+        };   
+        const int BATCH_SIZE {64};
+        const int batches_per_epoch = std::ceil(dataset_size / static_cast<double>(BATCH_SIZE));
+
+        const auto loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(
+            std::move(dataset),
+            torch::data::DataLoaderOptions().batch_size(BATCH_SIZE).workers(2));
+
+        torch::Device device {torch::kCUDA};
+        const int EPOCHS = 10; // 6000
+        const int LOG_INTERVAL = 1;
+        const int SAVE_INTERVAL = 1000;
+
+        Trainer<decltype(loader)> trainer {loader, gan, EPOCHS, device, LOG_INTERVAL, SAVE_INTERVAL, batches_per_epoch};
+        trainer.train();
+    }
+
+    void save_as_numpy(torch::Tensor t, const std::string& name)
+    {
+        t = t.detach().permute({1, 2, 0}).to(torch::kFloat); // 28, 28, 1
+        t = t.to(torch::kCPU);
+
+        std::vector<float> dst(28 * 28 * 1);
+        auto begin = static_cast<float*>(t.data_ptr());
+        auto end = begin + (28 * 28 * 1);
+        std::copy(begin, end, std::begin(dst));
+        const uint64_t shape [] = {28, 28, 1};
+        npy::SaveArrayAsNumpy(name, false, 3, shape, dst);
+    }
+
+    void test_3()
+    {
+        torch::manual_seed(1);
         int UPPER_SIZE = 800;
         auto dataset = CustomDataset {PATH, UPPER_SIZE}
             .map(torch::data::transforms::Normalize<>(127.5, 127.5))
@@ -95,33 +143,26 @@ namespace
             torch::data::DataLoaderOptions().batch_size(BATCH_SIZE).workers(2));
 
         torch::Device device {torch::kCUDA};
-        const int EPOCHS = 1; // 6000
-        const int LOG_INTERVAL = 1;
-        const int SAVE_INTERVAL = 1000;
+        gan->to(device);
+        float d_real_loss {};
+        float d_fake_loss {};
+        int c = 0;
+        for (const auto& batch : *loader)
+        {
+            const auto data = batch.data.to(device);
+            const auto real_output = gan->get_discriminator()->forward(data);
+            const auto real_labels = torch::ones({real_output.size(0), 1}).to(device);
+            const auto real_loss = torch::binary_cross_entropy(real_output, real_labels);
+     
+            std::cout << real_loss.template item<float>()  << std::endl;
+            if (c == 2)
+            {
+                break;
+            }
+            ++c;
+        } 
 
-        Trainer<decltype(loader)> trainer {loader, gan, EPOCHS, device, LOG_INTERVAL, SAVE_INTERVAL, batches_per_epoch};
-        trainer.train();
     }
-
-    void save_as_numpy(torch::Tensor t, const std::string& name)
-    {
-        t = t.detach().permute({1, 2, 0}).to(torch::kFloat); // 28, 28, 1
-        t = t.to(torch::kCPU);
-
-        std::vector<float> dst(28 * 28 * 1);
-        auto begin = static_cast<float*>(t.data_ptr());
-        auto end = begin + (28 * 28 * 1);
-        std::copy(begin, end, std::begin(dst));
-        const uint64_t shape [] = {28, 28, 1};
-        npy::SaveArrayAsNumpy(name, false, 3, shape, dst);
-    }
-
-    void test_3()
-    {
-        torch::Tensor t {};
-        torch::load(t, "./real_image.pt");
-        save_as_numpy(t[10], "./real_image.npy");
-   }
 }
 
 BOOST_AUTO_TEST_CASE(TEST_TRAINER)

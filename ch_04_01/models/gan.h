@@ -62,7 +62,6 @@ private:
     void build();
     torch::nn::Sequential build_discriminator();
     torch::nn::Sequential build_generator();
-    void build_adversarial();
 };
 TORCH_MODULE(GAN);
 #endif // GAN_INCLUDE
